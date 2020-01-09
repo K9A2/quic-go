@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+	// "github.com/google/logger"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 	"github.com/onsi/ginkgo"
@@ -132,6 +133,9 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 	s.addListener(&ln)
 	defer s.removeListener(&ln)
 
+	// 在开始接受第一条连接之前初始化 MemoryStorage
+	// quic.InitMemoryStorage()
+
 	for {
 		sess, err := ln.Accept(context.Background())
 		if err != nil {
@@ -243,6 +247,20 @@ func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder, onFrameE
 	} else {
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
+
+	// // 绑定 StreamID 与 URL
+	// var url string
+	// if req.RequestURI == "/" {
+	// 	url = "index.html"
+	// } else {
+	// 	url = req.RequestURI[1:]
+	// }
+	// // logger.Infof("%s %s", req.Method, url)
+	// quic.GetMemoryStorage().BindURLAndStreamID(url, str.StreamID())
+	// // 替换原有带斜杠的 url，使得在项目范围内不再需要去除此斜杠
+	// req.RequestURI = url
+
+	// logger.Infof("url <%v> is on stream <%v>", req.RequestURI, str.StreamID())
 
 	req = req.WithContext(str.Context())
 	responseWriter := newResponseWriter(str, s.logger)

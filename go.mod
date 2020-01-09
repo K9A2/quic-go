@@ -7,6 +7,7 @@ require (
 	github.com/cheekybits/genny v1.0.0
 	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.3.0
+	github.com/google/logger v1.0.1
 	github.com/marten-seemann/chacha20 v0.2.0
 	github.com/marten-seemann/qpack v0.1.0
 	github.com/marten-seemann/qtls v0.4.1
