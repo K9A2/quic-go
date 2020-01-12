@@ -1,0 +1,29 @@
+{
+  "apps": {
+    "tls": {
+      "certificates": {
+        "load_files": [{
+          "certificate": "cert.pem",
+          "key": "cert.key"
+        }]
+      }
+    },
+    "http": {
+      "http_port": 80,
+      "https_port": 443,
+      "servers": {
+        "myserver": {
+          "listen": ["0.0.0.0:443"],
+          "routes": [{
+            "handle": [{
+              "handler": "file_server",
+	      "root": "./"
+            }]
+          }],
+	  "tls_connection_policies": [{}],
+          "experimental_http3": true
+        }
+      }
+    }
+  }
+}

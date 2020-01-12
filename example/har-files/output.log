@@ -1,0 +1,44 @@
+indegree list
+  indegree = <19.0>, url = <https://www.stormlin.com/>
+  indegree = <6.0>, url = <https://www.stormlin.com/desktop_polymer_v2.js>
+  indegree = <4.0>, url = <https://www.stormlin.com/web-animations-next-lite.min.js>
+  indegree = <4.0>, url = <https://www.stormlin.com/webcomponents-sd.js>
+  indegree = <4.0>, url = <https://www.stormlin.com/scheduler.js>
+  indegree = <2.0>, url = <https://www.stormlin.com/custom-elements-es5-adapter.js>
+  indegree = <2.0>, url = <https://www.stormlin.com/spf.js>
+  leaf node, size = <2369.0>KB, url = <https://www.stormlin.com/desktop_polymer_v2-vflfD_pIA.html>
+  leaf node, size = <0.8>KB, url = <https://www.stormlin.com/www-onepick-2x-webp-vflsYL2Tr.css>
+  leaf node, size = <2.4>KB, url = <https://www.stormlin.com/YTSans300500700.css>
+  leaf node, size = <4.5>KB, url = <https://www.stormlin.com/RobotoMono400700.css>
+  leaf node, size = <4.9>KB, url = <https://www.stormlin.com/www-main-desktop-watch-page-skeleton-2x-webp-vflQ9GNSj.css>
+  leaf node, size = <7.8>KB, url = <https://www.stormlin.com/www-main-desktop-home-page-skeleton-2x-webp-vfl4iT_wE.css>
+  leaf node, size = <16.5>KB, url = <https://www.stormlin.com/Roboto400300300italic400italic500500italic700700italic.css>
+  leaf node, size = <270.6>KB, url = <https://www.stormlin.com/www-player-2x-webp.css>
+  leaf node, size = <270.6>KB, url = <https://www.stormlin.com/www-player-2x-webp.css>
+  leaf node, size = <0.6>KB, url = <https://www.stormlin.com/www-prepopulator.js>
+  leaf node, size = <9.9>KB, url = <https://www.stormlin.com/www-tampering.js>
+  leaf node, size = <11.9>KB, url = <https://www.stormlin.com/network.js>
+  leaf node, size = <1234.0>KB, url = <https://www.stormlin.com/base.js>
+  leaf node, size = <1234.0>KB, url = <https://www.stormlin.com/base.js>
+load order list
+  average_order = <1.0>, url = <https://www.stormlin.com/>
+  average_order = <1.7>, url = <https://www.stormlin.com/desktop_polymer_v2.js>
+  average_order = <3.0>, url = <https://www.stormlin.com/webcomponents-sd.js>
+  average_order = <4.0>, url = <https://www.stormlin.com/scheduler.js>
+  average_order = <5.0>, url = <https://www.stormlin.com/web-animations-next-lite.min.js>
+  average_order = <6.0>, url = <https://www.stormlin.com/custom-elements-es5-adapter.js>
+  average_order = <6.0>, url = <https://www.stormlin.com/spf.js>
+  leaf node, size = <2369.0>KB, url = <https://www.stormlin.com/desktop_polymer_v2-vflfD_pIA.html>
+  leaf node, size = <9.9>KB, url = <https://www.stormlin.com/www-tampering.js>
+  leaf node, size = <0.6>KB, url = <https://www.stormlin.com/www-prepopulator.js>
+  leaf node, size = <11.9>KB, url = <https://www.stormlin.com/network.js>
+  leaf node, size = <2.4>KB, url = <https://www.stormlin.com/YTSans300500700.css>
+  leaf node, size = <7.8>KB, url = <https://www.stormlin.com/www-main-desktop-home-page-skeleton-2x-webp-vfl4iT_wE.css>
+  leaf node, size = <0.8>KB, url = <https://www.stormlin.com/www-onepick-2x-webp-vflsYL2Tr.css>
+  leaf node, size = <4.9>KB, url = <https://www.stormlin.com/www-main-desktop-watch-page-skeleton-2x-webp-vflQ9GNSj.css>
+  leaf node, size = <16.5>KB, url = <https://www.stormlin.com/Roboto400300300italic400italic500500italic700700italic.css>
+  leaf node, size = <4.5>KB, url = <https://www.stormlin.com/RobotoMono400700.css>
+  leaf node, size = <1234.0>KB, url = <https://www.stormlin.com/base.js>
+  leaf node, size = <270.6>KB, url = <https://www.stormlin.com/www-player-2x-webp.css>
+  leaf node, size = <1234.0>KB, url = <https://www.stormlin.com/base.js>
+  leaf node, size = <270.6>KB, url = <https://www.stormlin.com/www-player-2x-webp.css>
