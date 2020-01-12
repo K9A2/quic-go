@@ -26,10 +26,10 @@ type body struct {
 
 var _ io.ReadCloser = &body{}
 
-func newRequestBody(str quic.Stream, onFrameError func()) *body {
+func newRequestBody(str quic.Stream) *body {
 	return &body{
 		str:          str,
-		onFrameError: onFrameError,
+		// onFrameError: onFrameError,
 		isRequest:    true,
 	}
 }

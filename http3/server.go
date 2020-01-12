@@ -15,10 +15,11 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+	// "github.com/go-acme/lego/log"
 	// "github.com/google/logger"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
-	"github.com/onsi/ginkgo"
+	// "github.com/onsi/ginkgo"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -163,6 +164,14 @@ func (s *Server) removeListener(l *quic.Listener) {
 	s.mutex.Unlock()
 }
 
+func (s *Server) handleResponseFunc(
+	str quic.Stream, responseWriter http.ResponseWriter, req *http.Request) {
+	// 返回响应体
+	s.handleRequest(str, responseWriter, req)
+	// 在发送完响应体之后关闭对应的 stream
+	str.Close()
+}
+
 func (s *Server) handleConn(sess quic.Session) {
 	// TODO: accept control streams
 	decoder := qpack.NewDecoder(nil)
@@ -178,32 +187,17 @@ func (s *Server) handleConn(sess quic.Session) {
 	str.Write(buf.Bytes())
 
 	for {
+		// 接受客户端发送的 request
 		str, err := sess.AcceptStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
-		go func() {
-			defer ginkgo.GinkgoRecover()
-			rerr := s.handleRequest(str, decoder, func() {
-				sess.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
-			})
-			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
-				s.logger.Debugf("Handling request failed: %s", err)
-				if rerr.streamErr != 0 {
-					str.CancelWrite(quic.ErrorCode(rerr.streamErr))
-				}
-				if rerr.connErr != 0 {
-					var reason string
-					if rerr.err != nil {
-						reason = rerr.err.Error()
-					}
-					sess.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
-				}
-				return
-			}
-			str.Close()
-		}()
+
+		// 解析请求并构造对应的 ResponseWriter
+		responseWriter, request := s.decodeRequest(str, decoder)
+		// 在新起的 go 程中处理 request 和 response
+		go s.handleResponseFunc(str, responseWriter, request)
 	}
 }
 
@@ -214,61 +208,26 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
-	frame, err := parseNextFrame(str)
-	if err != nil {
-		return newStreamError(errorRequestIncomplete, err)
-	}
-	hf, ok := frame.(*headersFrame)
-	if !ok {
-		return newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
-	}
-	if hf.Length > s.maxHeaderBytes() {
-		return newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes()))
-	}
+// decodeRequest 负责解码收到的请求
+func (s *Server) decodeRequest(str quic.Stream, decoder *qpack.Decoder) (
+	http.ResponseWriter, *http.Request) {
+	frame, _ := parseNextFrame(str)
+	hf, _ := frame.(*headersFrame)
 	headerBlock := make([]byte, hf.Length)
-	if _, err := io.ReadFull(str, headerBlock); err != nil {
-		return newStreamError(errorRequestIncomplete, err)
-	}
-	hfs, err := decoder.DecodeFull(headerBlock)
-	if err != nil {
-		// TODO: use the right error code
-		return newConnError(errorGeneralProtocolError, err)
-	}
-	req, err := requestFromHeaders(hfs)
-	if err != nil {
-		// TODO: use the right error code
-		return newStreamError(errorGeneralProtocolError, err)
-	}
-	req.Body = newRequestBody(str, onFrameError)
+	io.ReadFull(str, headerBlock)
+	hfs, _ := decoder.DecodeFull(headerBlock)
+	req, _ := requestFromHeaders(hfs)
 
-	if s.logger.Debug() {
-		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
-	} else {
-		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
-	}
-
-	// // 绑定 StreamID 与 URL
-	// var url string
-	// if req.RequestURI == "/" {
-	// 	url = "index.html"
-	// } else {
-	// 	url = req.RequestURI[1:]
-	// }
-	// // logger.Infof("%s %s", req.Method, url)
-	// quic.GetMemoryStorage().BindURLAndStreamID(url, str.StreamID())
-	// // 替换原有带斜杠的 url，使得在项目范围内不再需要去除此斜杠
-	// req.RequestURI = url
-
-	// logger.Infof("url <%v> is on stream <%v>", req.RequestURI, str.StreamID())
-
+	req.Body = newRequestBody(str)
 	req = req.WithContext(str.Context())
 	responseWriter := newResponseWriter(str, s.logger)
-	handler := s.Handler
-	if handler == nil {
-		handler = http.DefaultServeMux
-	}
 
+	return responseWriter, req
+}
+
+func (s *Server) handleRequest(
+	str quic.Stream, responseWriter http.ResponseWriter, req *http.Request) requestError {
+	handler := s.Handler
 	var panicked, readEOF bool
 	func() {
 		defer func() {
@@ -281,9 +240,10 @@ func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder, onFrameE
 				panicked = true
 			}
 		}()
+		// 以同步方式调用指定的 handler 处理响应体
 		handler.ServeHTTP(responseWriter, req)
 		// read the eof
-		if _, err = str.Read([]byte{0}); err == io.EOF {
+		if _, err := str.Read([]byte{0}); err == io.EOF {
 			readEOF = true
 		}
 	}()

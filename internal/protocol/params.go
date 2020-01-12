@@ -91,13 +91,16 @@ const MinStreamFrameBufferSize = 128
 const MaxCryptoStreamOffset = 16 * (1 << 10)
 
 // MinRemoteIdleTimeout is the minimum value that we accept for the remote idle timeout
-const MinRemoteIdleTimeout = 5 * time.Second
+// const MinRemoteIdleTimeout = 5 * time.Second
+const MinRemoteIdleTimeout = 300 * time.Second
 
 // DefaultIdleTimeout is the default idle timeout
-const DefaultIdleTimeout = 30 * time.Second
+// const DefaultIdleTimeout = 30 * time.Second
+const DefaultIdleTimeout = 300 * time.Second
 
 // DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
-const DefaultHandshakeTimeout = 10 * time.Second
+// const DefaultHandshakeTimeout = 10 * time.Second
+const DefaultHandshakeTimeout = 300 * time.Second
 
 // MaxKeepAliveInterval is the maximum time until we send a packet to keep a connection alive.
 // It should be shorter than the time that NATs clear their mapping.
