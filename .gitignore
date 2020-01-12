@@ -12,3 +12,5 @@ fuzzing/*/corpus/
 !fuzzing/frames/single-frame*
 !fuzzing/frames/multiple-frame*
 !fuzzing/header/header*
+
+example/har-files/*/stormserver
