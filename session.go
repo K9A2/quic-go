@@ -183,6 +183,12 @@ type session struct {
 
 	logID  string
 	logger utils.Logger
+
+	Schd ResponseWriterScheduler
+}
+
+func (s *session) Scheduler() ResponseWriterScheduler {
+	return s.conn.Scheduler()
 }
 
 var _ Session = &session{}
@@ -292,6 +298,9 @@ var newSession = func(
 	)
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
+
+	s.conn.Init()
+
 	return s
 }
 

@@ -186,6 +186,8 @@ type Session interface {
 	// ConnectionState returns basic details about the QUIC connection.
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() tls.ConnectionState
+
+	Scheduler() ResponseWriterScheduler
 }
 
 // An EarlySession is a session that is handshaking.

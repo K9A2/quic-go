@@ -15,11 +15,8 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
-	// "github.com/go-acme/lego/log"
-	// "github.com/google/logger"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
-	// "github.com/onsi/ginkgo"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -134,9 +131,6 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 	s.addListener(&ln)
 	defer s.removeListener(&ln)
 
-	// 在开始接受第一条连接之前初始化 MemoryStorage
-	// quic.InitMemoryStorage()
-
 	for {
 		sess, err := ln.Accept(context.Background())
 		if err != nil {
@@ -196,8 +190,11 @@ func (s *Server) handleConn(sess quic.Session) {
 
 		// 解析请求并构造对应的 ResponseWriter
 		responseWriter, request := s.decodeRequest(str, decoder)
+		// 把该 ResponseWriter 添加到调度器中
+		// fmt.Printf("accept request <%v>\n", request.RequestURI)
+		sess.Scheduler().AddNewResponseWriter(responseWriter, request, str, s.Handler)
 		// 在新起的 go 程中处理 request 和 response
-		go s.handleResponseFunc(str, responseWriter, request)
+		// go s.handleResponseFunc(str, responseWriter, request)
 	}
 }
 

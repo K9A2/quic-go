@@ -1,3 +1,3 @@
 build:
-	go build -o stormserver main.go
+	go build -race -o stormserver main.go
 	mv stormserver ./har-files/youtube

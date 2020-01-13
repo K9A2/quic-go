@@ -12,6 +12,9 @@ type connection interface {
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
 	SetCurrentRemoteAddr(net.Addr)
+
+	Scheduler() ResponseWriterScheduler
+	Init()
 }
 
 type conn struct {
@@ -19,6 +22,19 @@ type conn struct {
 
 	pconn       net.PacketConn
 	currentAddr net.Addr
+
+	// 每一条 HTTP3 连接会有一个调度器
+	schd ResponseWriterScheduler
+}
+
+func (c *conn) Init() {
+	c.schd = InitResponseWriterScheduler()
+	c.schd.Run()
+}
+
+// 获得调度器实例
+func (c *conn) Scheduler() ResponseWriterScheduler {
+	return c.schd
 }
 
 var _ connection = &conn{}
