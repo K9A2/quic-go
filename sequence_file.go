@@ -9,29 +9,29 @@ import (
 
 const configFileName = "managed-streams.json"
 
-var youtubeList = []string{
-	"index.html",
-	"desktop_polymer_v2-vflfD_pIA.html",
-	"www-onepick-2x-webp-vflsYL2Tr.css",
-	"YTSans300500700.css",
-	"RobotoMono400700.css",
-	"www-main-desktop-watch-page-skeleton-2x-webp-vflQ9GNSj.css",
-	"www-main-desktop-home-page-skeleton-2x-webp-vfl4iT_wE.css",
-	"Roboto400300300italic400italic500500italic700700italic.css",
-	"www-player-2x-webp.css",
-	"www-prepopulator.js",
-	"custom-elements-es5-adapter.js",
-	"scheduler.js",
-	"www-tampering.js",
-	"network.js",
-	"spf.js",
-	"web-animations-next-lite.min.js",
-	"webcomponents-sd.js",
-	"base.js",
-	"desktop_polymer_v2.js",
-	"KFOmCnqEu92Fr1Mu4mxK.woff2",
-	"KFOlCnqEu92Fr1MmEU9fBBc4.woff2",
-}
+// var youtubeList = []string{
+// 	"index.html",
+// 	"desktop_polymer_v2-vflfD_pIA.html",
+// 	"www-onepick-2x-webp-vflsYL2Tr.css",
+// 	"YTSans300500700.css",
+// 	"RobotoMono400700.css",
+// 	"www-main-desktop-watch-page-skeleton-2x-webp-vflQ9GNSj.css",
+// 	"www-main-desktop-home-page-skeleton-2x-webp-vfl4iT_wE.css",
+// 	"Roboto400300300italic400italic500500italic700700italic.css",
+// 	"www-player-2x-webp.css",
+// 	"www-prepopulator.js",
+// 	"custom-elements-es5-adapter.js",
+// 	"scheduler.js",
+// 	"www-tampering.js",
+// 	"network.js",
+// 	"spf.js",
+// 	"web-animations-next-lite.min.js",
+// 	"webcomponents-sd.js",
+// 	"base.js",
+// 	"desktop_polymer_v2.js",
+// 	"KFOmCnqEu92Fr1Mu4mxK.woff2",
+// 	"KFOlCnqEu92Fr1MmEU9fBBc4.woff2",
+// }
 
 // SequenceFile 是 JSON 格式的传输顺序文件
 type SequenceFile struct {

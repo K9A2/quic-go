@@ -33,20 +33,32 @@ func newResponseWriterControlBlock(writer http.ResponseWriter,
 	}
 }
 
-const (
-	roundRobinScheduler = "round-robin-scheduler"
+var (
+	// currentScheduler = staticOrderSchedulerName
+	currentScheduler = staticOrderSchedulerName 
+	currentOrderList = youtubeList
 )
-
-var currentScheduler = roundRobinScheduler
 
 // InitResponseWriterScheduler 根据配置的调度器类型初始化对应的调度器实例
 func InitResponseWriterScheduler() ResponseWriterScheduler {
 	var scheduler ResponseWriterScheduler
 	switch currentScheduler {
-	case roundRobinScheduler:
+	case roundRobinSchedulerName:
 		{
 			scheduler = NewRoundRobinScheduler()
 		}
+	case staticOrderSchedulerName:
+		{
+			scheduler = NewStaticOrderScheduler()
+		}
 	}
 	return scheduler
+}
+
+// getFileName 根据接受的 url 返回对应的文件名
+func getFileName(url string) string {
+	if url == "/" {
+		return "index.html"
+	}
+	return url[1:]
 }

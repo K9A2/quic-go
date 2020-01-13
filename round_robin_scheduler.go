@@ -38,7 +38,7 @@ func (schd *RoundRobinScheduler) Run() {
 			case newBlock := <-schd.blockArriveChan:
 				{
 					if newBlock != nil {
-						go executeResponseWriter(newBlock)
+						go schd.executeResponseWriter(newBlock)
 					}
 				}
 			}
@@ -57,16 +57,16 @@ func (schd *RoundRobinScheduler) AddNewResponseWriter(writer http.ResponseWriter
 func (schd *RoundRobinScheduler) tryExecuteResponseWriter() {
 }
 
-// executeResponseWriter 实际执行给定的 ResponseWriter
-func executeResponseWriter(block *ResponseWriterControlBlock) {
-	// 执行该 ResponseWriter
-	block.handler.ServeHTTP(*block.writer, block.request)
-	// ResponseWriter 执行完之后需要手动关闭对应的 QUIC Stream
-	block.str.Close()
-}
-
 // popNextResponseWriter 给出下一个应当触发的控制块
 func (schd *RoundRobinScheduler) popNextResponseWriter() *ResponseWriterControlBlock {
 	// RoundRobinScheduler 不需要使用此方法
 	return nil
+}
+
+// executeResponseWriter 实际执行给定的 ResponseWriter
+func (schd *RoundRobinScheduler) executeResponseWriter(block *ResponseWriterControlBlock) {
+	// 执行该 ResponseWriter
+	block.handler.ServeHTTP(*block.writer, block.request)
+	// ResponseWriter 执行完之后需要手动关闭对应的 QUIC Stream
+	block.str.Close()
 }
