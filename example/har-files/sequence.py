@@ -430,7 +430,22 @@ def command_performance(argv):
     """
     根据 chrome performance 日志生成最优加载顺序
     """
-    pass
+    # 统计本文件中一共包含了哪几类数据，并按照分类输出到不同的文件中
+    result = []
+    critical_categories = [
+        'blink,devtools.timeline.json',
+        'blink,user_timing',
+        'devtools.timeline,rail',
+        'devtools.timeline',
+        'loading,rail,devtools.timeline'
+    ]
+    with open('profile-sample.json', 'r') as json_file:
+        data = json.load(json_file)
+        for log in data:
+            cat = log['cat']
+            if cat in critical_categories:
+                result.append(log)
+    save_har_file(result, 'filtered_result.json')
 
 
 def main(argv):
@@ -454,6 +469,8 @@ def main(argv):
         return
     elif command == 'static-file-size':
         command_static_file_size(argv[1:])
+    elif command == 'performance':
+        command_performance(argv[1:])
 
 
 if __name__ == "__main__":

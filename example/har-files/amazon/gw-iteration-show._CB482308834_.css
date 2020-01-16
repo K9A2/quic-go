@@ -1,0 +1,31 @@
+.bunkBedShifted { margin-left: 186px; }
+.gw-iter-center{position:relative;width:1320px;height:162px;}
+.gw-iter-content{position: relative;width: 263px;height: 162px;float: left;}
+.gw-iter-header{position:relative;width:263px;height:30px;}
+.gw-iter-title{float:left;left:0px;width:263px;height:30px;}
+.gw-iter-title-font{line-height:18px;margin:10px 0px 0px 10px;}
+.gw-iter-title-font a:hover{text-decoration:none;color:#FF8C00;}
+.gw-iter-title-font a:link{text-decoration:none;color:#FF8C00;}
+.gw-iter-title-font a{text-decoration:none;color:#FF8C00;}
+.gw-iter-title-href{text-decoration:none;}
+.gw-iter-title-black{color:#333333;font-family: 'Microsoft Yahei';font-weight: 700;font-size: 18px;}
+.gw-iter-title-orange{color:#CD4D00;font-family: 'Microsoft Yahei';font-weight: 700;font-size: 18px;}
+.gw-iter-detail{margin-left:10px;float:left;position:relative;width:108px;height:108px;margin-top:20px;}
+.gw-iter-proItem{margin:0px;height:16px;}
+.gw-iter-proTitle{font-family: 'Arial Normal', 'Arial';font-weight: 400;font-style: normal;font-size: 13px;color: #333333;text-align: left;line-height: normal;color: #B12704;text-overflow: ellipsis;white-space: nowrap;overflow: hidden;display: block;max-height: 30px;}
+.gw-iter-priceItem{font-size:24px;font-family: 'Arial Negreta', 'Arial';font-weight: 700;color: #B12704;font-style: normal;text-align: left;line-height: normal;margin: 0px;}
+.gw-iter-priceSymbol{font-size:16px;}
+.gw-iter-priceNumber{font-size:23px;}
+.gw-iter-deadItem{margin:0px;bottom: 46px;position: absolute;}
+.gw-iter-deadTime{color: #767676;font-family: 'Arial Normal', 'Arial';font-weight: 400;font-style: normal;font-size: 13px;text-align: left;line-height: normal;}
+.gw-iter-img{float:left;position:relative;width:144px;height:134px;text-align:center;}
+.gw-iter-img-a{vertical-align: middle;display: table-cell;width:144px;height: 134px;}
+.gw-iter-img-detail{left: 0px;top: 0px;max-width: 144px;max-height: 134px;}
+.gw-iter-division{position: relative;float: left;width:1px;top:11px;}
+.gw-iter-division-img{width: 1px;height:155px;}
+.gw-iter-originPrice{color: #999999;font-family: 'Arial Normal', 'Arial';font-weight: 400;font-style: normal;font-size: 13px;text-align: left;line-height: normal;text-decoration:line-through}
+.gw-iter-anchorItem{margin:0px;position: absolute;bottom: 0px;}
+.gw-iter-anchorItem a:visited{opacity: 1;font-size: 12px;color: #767676;text-align: left;line-height: 20px;}
+.gw-iter-anchorItem a:link{opacity: 1;text-decoration: none;font-size: 12px;color: #767676;text-align: left;line-height: 20px;}
+.gw-iter-anchorItem a:hover{color:#FF8C00;text-decoration: none;}
+.gw-iter-anchorImg {vertical-align: middle;}
