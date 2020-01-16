@@ -26,8 +26,8 @@ def is_text_file(mime_type):
 
 
 def main():
-    harfile_path = 'www.amazon.cn.har'
-    output_folder = './amazon/'
+    harfile_path = 'www.google.com.har'
+    output_folder = './google/'
     harfile = open(harfile_path)
     harfile_json = json.loads(harfile.read())
 
@@ -70,17 +70,15 @@ def main():
         #     decoded = True
 
         content = response['content']['text']
-        print(content)
-        break
-        # if resource_name == '':
-        #     resource_name = 'index.html'
-        # print('extracted from har text: %s' % resource_name)
-        # if is_text_file(mime_type):
-        #     if decoded:
-        #         content = content.decode('utf-8')
-        #     write(output_folder + resource_name, content, 'w')
-        # else:
-        #     write(output_folder + resource_name, content, 'wb')
+        if resource_name == '':
+            resource_name = 'index.html'
+        print('extracted from har text: %s' % resource_name)
+        if is_text_file(mime_type):
+            if decoded:
+                content = content.decode('utf-8')
+            write(output_folder + resource_name, content, 'w')
+        else:
+            write(output_folder + resource_name, content, 'wb')
 
 
 if __name__ == "__main__":
