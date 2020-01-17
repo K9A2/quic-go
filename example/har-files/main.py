@@ -14,7 +14,7 @@ def write(file_path, content, mode):
 def is_text_file(mime_type):
     text_file_types = [
         'text/html', 'text/plain', 'text/javascript', 'text/css', 'application/json',
-        'application/x-javascript'
+        'application/x-javascript', 'application/javascript'
     ]
     # binary_file_types = [
     #     'font/woff2', 'image/jpeg', 'image/webp', 'image/gif'
@@ -26,8 +26,8 @@ def is_text_file(mime_type):
 
 
 def main():
-    harfile_path = 'www.google.com.har'
-    output_folder = './google/'
+    harfile_path = 'www.qq.com.har'
+    output_folder = './qq/'
     harfile = open(harfile_path)
     harfile_json = json.loads(harfile.read())
 
@@ -45,7 +45,7 @@ def main():
         params = request['url'].split('/')
 
         url = request['url']
-        # print('processing: %s' % url)
+        print('processing: %s' % url)
 
         method = request['method']
         resource_name = params[RESOURCE_INDEX]
