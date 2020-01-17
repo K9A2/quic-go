@@ -26,8 +26,8 @@ def is_text_file(mime_type):
 
 
 def main():
-    harfile_path = 'www.qq.com.har'
-    output_folder = './qq/'
+    harfile_path = 'www.sina.com.cn.har'
+    output_folder = './sina/'
     harfile = open(harfile_path)
     harfile_json = json.loads(harfile.read())
 
