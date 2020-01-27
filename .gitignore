@@ -14,3 +14,4 @@ fuzzing/*/corpus/
 !fuzzing/header/header*
 
 example/har-files/*/stormserver
+.vscode/
