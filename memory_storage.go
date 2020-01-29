@@ -7,6 +7,7 @@ import (
   "sync"
 
   "github.com/google/logger"
+	"github.com/lucas-clemente/quic-go/order"
 )
 
 // StreamControlBlock 是 MemoryStorage 中存放的 stream 控制块
@@ -97,7 +98,7 @@ func InitMemoryStorage() {
   storage.URLToManagedStreamIndex[""] = 0 // 此 stream 位于队伍首位，以最高优先级传输
   logger.Infof("url = <%v> added to index <%v>", "", 0)
   // 加载其余的 url 队列中
-  for index, url := range youtubeList {
+  for index, url := range order.YoutubeNetworkList {
     storage.ManagedStreams =
       append(storage.ManagedStreams, NewStreamControlBlock(-1, url, false, nil, false))
     storage.URLToManagedStreamIndex[url] = index + 1

@@ -2,6 +2,8 @@ package quic
 
 import (
 	"net/http"
+
+	"github.com/lucas-clemente/quic-go/order"
 )
 
 // ResponseWriterScheduler 是调度器的抽象接口，所有调度器都必须实现接口中所定义的全部方法
@@ -36,7 +38,7 @@ func newResponseWriterControlBlock(writer http.ResponseWriter,
 var (
 	// currentScheduler = staticOrderSchedulerName
 	currentScheduler = staticOrderSchedulerName 
-	currentOrderList = youtubeList
+	currentOrderList = order.YoutubeNetworkList
 )
 
 // InitResponseWriterScheduler 根据配置的调度器类型初始化对应的调度器实例

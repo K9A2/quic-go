@@ -1,0 +1,73 @@
+package order
+
+// YoutubeNetworkList 是从 network 依赖关系提取的传输顺序
+var YoutubeNetworkList = []string{
+	"index.html",
+	"desktop_polymer_v2.js",
+	"webcomponents-sd.js",
+	"scheduler.js",
+	"web-animations-next-lite.min.js",
+	"custom-elements-es5-adapter.js",
+	"desktop_polymer_v2-vflfD_pIA.html",
+	"www-onepick-2x-webp-vflsYL2Tr.css",
+	"YTSans300500700.css",
+	"www-main-desktop-home-page-skeleton-2x-webp-vfl4iT_wE.css",
+	"KFOmCnqEu92Fr1Mu4mxK.woff2",
+	"KFOlCnqEu92Fr1MmEU9fBBc4.woff2",
+	"www-prepopulator.js",
+	"www-tampering.js",
+	"network.js",
+	"spf.js",
+	"RobotoMono400700.css",
+	"Roboto400300300italic400italic500500italic700700italic.css",
+	"www-player-2x-webp.css",
+	"base.js",
+}
+
+// YoutubePerformanceList 是从 performance 页面中提取的执行顺序
+var YoutubePerformanceList = []string{
+	"index.html",
+	"web-animations-next-lite.min.js",
+	"custom-elements-es5-adapter.js",
+	"webcomponents-sd.js",
+	"desktop_polymer_v2-vflfD_pIA.html",
+	"scheduler.js",
+	"www-tampering.js",
+	"www-prepopulator.js",
+	"spf.js",
+	"network.js",
+	"YTSans300500700.css",
+	"www-main-desktop-home-page-skeleton-2x-webp-vfl4iT_wE.css",
+	"www-onepick-2x-webp-vflsYL2Tr.css",
+	"desktop_polymer_v2.js",
+	"KFOmCnqEu92Fr1Mu4mxK.woff2",
+	"Roboto400300300italic400italic500500italic700700italic.css",
+	"KFOlCnqEu92Fr1MmEU9fBBc4.woff2",
+	"RobotoMono400700.css",
+	"base.js",
+	"www-player-2x-webp.css",
+}
+
+// YoutubeNetworkPlusList 是合并了从 network 和 performance 两种顺序之后的结果
+var YoutubeNetworkPlusList = []string{
+	"index.html",
+	"desktop_polymer_v2.js",
+	"webcomponents-sd.js",
+	"scheduler.js",
+	"web-animations-next-lite.min.js",
+	"custom-elements-es5-adapter.js",
+	"desktop_polymer_v2-vflfD_pIA.html",
+	"www-tampering.js",
+	"www-prepopulator.js",
+	"spf.js",
+	"network.js",
+	"YTSans300500700.css",
+	"www-main-desktop-home-page-skeleton-2x-webp-vfl4iT_wE.css",
+	"www-onepick-2x-webp-vflsYL2Tr.css",
+	"KFOmCnqEu92Fr1Mu4mxK.woff2",
+	"KFOlCnqEu92Fr1MmEU9fBBc4.woff2",
+	"Roboto400300300italic400italic500500italic700700italic.css",
+	"RobotoMono400700.css",
+	"base.js",
+	"www-player-2x-webp.css",
+}
