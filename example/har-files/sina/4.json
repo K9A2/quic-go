@@ -1,0 +1,27 @@
+{
+  "id": 2,
+  "name": "DARLA Container",
+  "description": "DARLA OPUS Container",
+  "maxFiringLimit": 5,
+  "disabled": false,
+  "dsp": {
+    "include": false,
+    "max": 10
+  },
+  "dataXDataPartner": {
+    "include": true,
+    "max": 5
+  },
+  "aolDataPartner": {
+    "include": true,
+    "max": 5
+  },
+  "local": {
+    "include": false,
+    "content": ""
+  },
+  "createdBy": "user1",
+  "createdOn": 1548875411578,
+  "modifiedBy": "user2",
+  "modifiedOn": 1549400634324
+}

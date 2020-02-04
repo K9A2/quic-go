@@ -1,0 +1,594 @@
+{
+  "log": [
+    {
+      "url": "https://www.stormlin.com/",
+      "method": "GET",
+      "mimeType": "text/html",
+      "size": 249842,
+      "initiator": {
+        "type": "other"
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/qq_3422090a.css",
+      "method": "GET",
+      "mimeType": "text/css",
+      "size": 74397,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 23
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/qq_logo_2x.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 13500,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 55
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/netwatch.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 7481,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 301
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ninja153907290259802.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 8542,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 306
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ninja153907291410277.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 14930,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 311
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ninja157916295580794.jpg",
+      "method": "GET",
+      "mimeType": "image/jpeg",
+      "size": 4385,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 513
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/0",
+      "method": "GET",
+      "mimeType": "image/jpeg",
+      "size": 321082,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 547
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/150949024.jpg",
+      "method": "GET",
+      "mimeType": "image/jpeg",
+      "size": 81069,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 593
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/150949053.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 143642,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 615
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/150949349.jpg",
+      "method": "GET",
+      "mimeType": "image/jpeg",
+      "size": 16401,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 685
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/u00339ab1y0_496_2800.webp",
+      "method": "GET",
+      "mimeType": "image/webp",
+      "size": 36654,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 693
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/11164866855_6403300.webp",
+      "method": "GET",
+      "mimeType": "image/webp",
+      "size": 112251,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 742
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ninja157916094974226.jpg",
+      "method": "GET",
+      "mimeType": "image/jpeg",
+      "size": 27855,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 890
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ninja157914494128428.jpg",
+      "method": "GET",
+      "mimeType": "image/jpeg",
+      "size": 15816,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 928
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ninja157914520089210.jpg",
+      "method": "GET",
+      "mimeType": "image/jpeg",
+      "size": 21340,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 938
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/default_b.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 10392,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 986
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/11211971173_5803280.webp",
+      "method": "GET",
+      "mimeType": "image/webp",
+      "size": 220198,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 1467
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/11214208567_5803280.webp",
+      "method": "GET",
+      "mimeType": "image/webp",
+      "size": 72201,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 1492
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/11214200375_5803280.webp",
+      "method": "GET",
+      "mimeType": "image/webp",
+      "size": 321082,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 1517
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ind36.gif",
+      "method": "GET",
+      "mimeType": "image/gif",
+      "size": 835,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2874
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/buliang.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 1709,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2879
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/wmlogo.gif",
+      "method": "GET",
+      "mimeType": "image/gif",
+      "size": 1841,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2884
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/cxrz5.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 4685,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2888
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/gswj2015.jpg",
+      "method": "GET",
+      "mimeType": "image/jpeg",
+      "size": 2318,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2891
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/jquery-1.11.1.min.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 0,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2967
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/txplayer.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 0,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2968
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/5d09e4c5.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 738,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2969
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ping.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 23412,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2970
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/qq_3422090a.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 85957,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2972
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/qbs.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 5846,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2974
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/crystal-min.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 135254,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2978
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/default_s.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 4912,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2897
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/hd_bg.png",
+      "method": "GET",
+      "mimeType": "image/png",
+      "size": 2130,
+      "initiator": {
+        "type": "parser",
+        "url": "https://www.stormlin.com/",
+        "lineNumber": 2897
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/qbscomm.20150907.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 15915,
+      "initiator": {
+        "type": "script",
+        "stack": {
+          "callFrames": [
+            {
+              "functionName": "_load_js",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 13,
+              "columnNumber": 18
+            },
+            {
+              "functionName": "load",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 19,
+              "columnNumber": 781
+            },
+            {
+              "functionName": "k",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 19,
+              "columnNumber": 899
+            },
+            {
+              "functionName": "",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 20,
+              "columnNumber": 0
+            },
+            {
+              "functionName": "",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 20,
+              "columnNumber": 41
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/gdtlib.20181219.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 39767,
+      "initiator": {
+        "type": "script",
+        "stack": {
+          "callFrames": [
+            {
+              "functionName": "_load_js",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 13,
+              "columnNumber": 18
+            },
+            {
+              "functionName": "load",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 19,
+              "columnNumber": 781
+            },
+            {
+              "functionName": "k",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 19,
+              "columnNumber": 899
+            },
+            {
+              "functionName": "",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 20,
+              "columnNumber": 0
+            },
+            {
+              "functionName": "",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 20,
+              "columnNumber": 41
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/ver.20170622.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 2813,
+      "initiator": {
+        "type": "script",
+        "stack": {
+          "callFrames": [
+            {
+              "functionName": "_load_js",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 13,
+              "columnNumber": 18
+            },
+            {
+              "functionName": "load",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 19,
+              "columnNumber": 781
+            },
+            {
+              "functionName": "k",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 19,
+              "columnNumber": 899
+            },
+            {
+              "functionName": "",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 20,
+              "columnNumber": 0
+            },
+            {
+              "functionName": "",
+              "scriptId": "75",
+              "url": "https://www.stormlin.com/qbs.js",
+              "lineNumber": 20,
+              "columnNumber": 41
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/stgw_precon.html",
+      "method": "GET",
+      "mimeType": "text/html",
+      "size": 0,
+      "initiator": {
+        "type": "script",
+        "stack": {
+          "callFrames": [],
+          "parent": {
+            "description": "Image",
+            "callFrames": [
+              {
+                "functionName": "_httpsPreload",
+                "scriptId": "75",
+                "url": "https://www.stormlin.com/qbs.js",
+                "lineNumber": 9,
+                "columnNumber": 608
+              },
+              {
+                "functionName": "",
+                "scriptId": "75",
+                "url": "https://www.stormlin.com/qbs.js",
+                "lineNumber": 20,
+                "columnNumber": 22
+              },
+              {
+                "functionName": "",
+                "scriptId": "75",
+                "url": "https://www.stormlin.com/qbs.js",
+                "lineNumber": 20,
+                "columnNumber": 41
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/stats.js",
+      "method": "GET",
+      "mimeType": "application/javascript",
+      "size": 8527,
+      "initiator": {
+        "type": "script",
+        "stack": {
+          "callFrames": [
+            {
+              "functionName": "",
+              "scriptId": "80",
+              "url": "https://www.stormlin.com/",
+              "lineNumber": 3000,
+              "columnNumber": 19
+            },
+            {
+              "functionName": "",
+              "scriptId": "80",
+              "url": "https://www.stormlin.com/",
+              "lineNumber": 3001,
+              "columnNumber": 4
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://www.stormlin.com/favicon2.ico",
+      "method": "GET",
+      "mimeType": "image/vnd.microsoft.icon",
+      "size": 4286,
+      "initiator": {
+        "type": "other"
+      }
+    }
+  ]
+}

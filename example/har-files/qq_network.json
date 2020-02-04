@@ -1,0 +1,34 @@
+{
+  "final_order": {
+    "0": {
+      "has_successor": [
+        "index.html"
+      ],
+      "no_successor": []
+    },
+    "1": {
+      "has_successor": [
+        "qbs.js"
+      ],
+      "no_successor": [
+        "qq_3422090a.css",
+        "jquery-1.11.1.min.js",
+        "txplayer.js",
+        "5d09e4c5.js",
+        "stats.js",
+        "ping.js",
+        "qq_3422090a.js",
+        "crystal-min.js"
+      ]
+    },
+    "2": {
+      "has_successor": [],
+      "no_successor": [
+        "stgw_precon.html",
+        "ver.20170622.js",
+        "qbscomm.20150907.js",
+        "gdtlib.20181219.js"
+      ]
+    }
+  }
+}

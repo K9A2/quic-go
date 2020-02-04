@@ -1,10 +1,10 @@
 
 /* CN-secure-sprites-sitewideSprites-3463305375.css start */
 
-.swSprite { display: -moz-inline-box; display: inline-block; margin: 0;padding: 0; position: relative; overflow: hidden; vertical-align: middle; background: url(https://images-cn.ssl-images-amazon.com/images/G/28/common/sprites/sprite-site-wide-2._V146303874_.png) no-repeat; }
+.swSprite { display: -moz-inline-box; display: inline-block; margin: 0;padding: 0; position: relative; overflow: hidden; vertical-align: middle; background: url(sprite-site-wide-2._V146303874_.png) no-repeat; }
 .swSprite span { position: absolute; left: -9999px; }
-.pageGradientTop { background: url(https://images-cn.ssl-images-amazon.com/images/G/28/common/sprites/sprite-site-wide-2._V146303874_.png) repeat-x scroll 0 -240px; height: 15px; }
-.pagGradientBottom { background: url(https://images-cn.ssl-images-amazon.com/images/G/28/common/sprites/sprite-site-wide-2._V146303874_.png) repeat-x scroll 0 -220px; height: 18px; }
+.pageGradientTop { background: url(sprite-site-wide-2._V146303874_.png) repeat-x scroll 0 -240px; height: 15px; }
+.pagGradientBottom { background: url(sprite-site-wide-2._V146303874_.png) repeat-x scroll 0 -220px; height: 18px; }
  .s_star_0_0, .s_star_0_5, .s_star_1_0, .s_star_1_5, .s_star_2_0, .s_star_2_5, .s_star_3_0, .s_star_3_5, .s_star_4_0, .s_star_4_5, .s_star_5_0, .s_chevron { vertical-align: baseline; top: 1px; }
 .s_starBrandBigFull  { background-position: -280px -261px; width: 32px;height: 30px; }
 .s_starBrandBigHalf  { background-position: -244px -261px; width: 32px;height: 30px; }
@@ -80,7 +80,7 @@
 .s_amznLikeButtonPressed { background-position: -210px -190px; width: 47px; height: 20px; }
 .s_amznLikeButtonOn { background-position: -260px -170px; width: 47px; height: 20px; }
 .s_amznLogo { width: 98px; height: 35px; }
-               
+
 .s_amznLikeButtonOff { width: 63px; }
 .s_amznLikeButtonPressed { width: 63px; }
 .s_amznLikeButtonOn { background-position: -280px -170px; width: 63px; }
@@ -103,13 +103,13 @@
 /* CN-secure-sprites-sitewideSprites-3463305375.css end */
 
 /* CN-secure-sprites-cmtySprites-165146142.css start */
-.cmtySprite { display: -moz-inline-box; display: inline-block; margin: 0;padding: 0; position: relative; overflow: hidden; vertical-align: middle; background: url('https://images-cn.ssl-images-amazon.com/images/G/28/common/sprites/sprite-communities._V164857955_.png') no-repeat; }
+.cmtySprite { display: -moz-inline-box; display: inline-block; margin: 0;padding: 0; position: relative; overflow: hidden; vertical-align: middle; background: url('sprite-communities._V164857955_.png') no-repeat; }
 button.cmtySprite { vertical-align: top; border: none; background-color: none; cursor: pointer; }
 .cmtySprite span { position: absolute; left: -9999px; }
 .s_paginationTop { background-position: -0px -710px; height: 18px; }
 .s_paginationBottom { background-position: -0px -690px; height: 18px; }
 .s_dottedLine { background-position: -0px -730px; height: 18px; }
- 
+
 .s_yes { background-position: 0px 0px; width: 31px;height: 17px; }
 .s_no { background-position: -50px 0px; width: 31px;height: 17px; }
 .s_largeYes { background-position: 0px -703px; width: 35px;height: 19px; }
@@ -145,7 +145,7 @@ button.cmtySprite { vertical-align: top; border: none; background-color: none; c
 .cBoxBR { bottom:-1px; right:-1px; }
 .cBoxR { position:absolute; display:block; width:1px; height:100%; top:-1px; right:-1px; background-color:#C9E1F4; }
 .cBoxB { position:absolute; display:block; width:100%; height:1px; bottom:-1px; background-color:#C9E1F4; }
-.cBoxTL, .cBoxTR, .cBoxBL, .cBoxBR { background-image:url(https://images-cn.ssl-images-amazon.com/images/G/28/common/sprites/sprite-site-wide-2._V146303874_.png); background-repeat:no-repeat; }
+.cBoxTL, .cBoxTR, .cBoxBL, .cBoxBR { background-image:url(sprite-site-wide-2._V146303874_.png); background-repeat:no-repeat; }
 .cBoxTL { background-position: 0px 0px; }
 .cBoxTR { background-position: -10px 0px; }
 .cBoxBL { background-position: 0px -10px; }

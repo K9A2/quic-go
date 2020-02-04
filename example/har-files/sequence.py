@@ -408,10 +408,12 @@ def sort_by_indegree_and_file_type(log_list):
 
     # 提取最终的传输顺序
     current_layer = 0
-    final_order = []
+    final_order = {}
     while current_layer < len(layer_control_dict.keys()):
-        final_order.extend(get_final_order(layer_control_dict[current_layer]['has_successor']))
-        final_order.extend(get_final_order(layer_control_dict[current_layer]['no_successor']))
+        final_order[current_layer] = {
+            'has_successor': get_final_order(layer_control_dict[current_layer]['has_successor']),
+            'no_successor': get_final_order(layer_control_dict[current_layer]['no_successor'])
+        }
         current_layer += 1
 
     return final_order

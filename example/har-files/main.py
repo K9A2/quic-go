@@ -26,8 +26,9 @@ def is_text_file(mime_type):
 
 
 def main():
-    harfile_path = 'www.sina.com.cn.har'
-    output_folder = './sina/'
+    sample_name = 'yahoo'
+    harfile_path = sample_name + '.har'
+    output_folder = './' + sample_name + '/'
     harfile = open(harfile_path)
     harfile_json = json.loads(harfile.read())
 

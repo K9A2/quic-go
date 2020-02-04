@@ -1,0 +1,52 @@
+{
+  "final_order": {
+    "0": {
+      "has_successor": [
+        "index.html"
+      ],
+      "no_successor": []
+    },
+    "1": {
+      "has_successor": [
+        "016iHgpF74L.js",
+        "cngwtcgv4._CB317633346_.js",
+        "APE-SafeFrame.js"
+      ],
+      "no_successor": [
+        "gw-iteration-show._CB482308834_.css",
+        "CNGatewayAuiAssets.css",
+        "AmazonNavigationDesktopMetaAsset.css",
+        "AmazonUI.css",
+        "31vhf8WcwVL.js",
+        "71cmUFJ-DEL.js",
+        "AmazonNavigationDesktopMetaAsset.js"
+      ]
+    },
+    "2": {
+      "has_successor": [],
+      "no_successor": [
+        "ajaxGetZDContentHtml.html",
+        "ajaxGetBooksContentHtml.html",
+        "ajaxGetBSContentHtml.html",
+        "ajaxGetZDPMultiContentHtml.html",
+        "get-slides-auto.html",
+        "sf-1.50.b3059ee._V445229579_.html",
+        "apb/content",
+        "sign-in._CB387120363_.css",
+        "error-styles-ssl._CB233214719_.css",
+        "CN-secure-combined-1442045934._CB363866141_.css",
+        "CN-secure-combined-3845290762._CB379596273_.css",
+        "ap_global._CB318885266_.css",
+        "ap-checkout-frn._CB367318943_.css",
+        "ap-flex-reduced-nav-2.1._CB343889107_.css",
+        "sign-in._CB375524530_.js",
+        "texttrace_typ._CB353754759_.js",
+        "ap_global-1.1._CB309211598_.js",
+        "jquery-1.2.6.min._CB234765502_.js",
+        "ap-flex-reduced-nav-2.0._CB309211261_.js",
+        "ap-checkout-frn._CB309211599_.js",
+        "fwcim._CB468448759_.js"
+      ]
+    }
+  }
+}

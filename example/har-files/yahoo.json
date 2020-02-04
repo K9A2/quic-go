@@ -1,0 +1,79 @@
+{
+  "final_order": {
+    "0": {
+      "has_successor": [
+        "index.html"
+      ],
+      "no_successor": []
+    },
+    "1": {
+      "has_successor": [
+        "cmp.js",
+        "rapid-3.53.3.js"
+      ],
+      "no_successor": [
+        "custom.desktop.c5483352.css",
+        "custom.desktop.1c7eb152.css",
+        "sda_flex_0.0.24.css",
+        "custom.desktop.7e1b5d2a.css",
+        "atomic.ltr.4eabd1b6.css",
+        "common.desktop.50367c51.css",
+        "atomic.ltr.e9c75cc2.css",
+        "atomic.ltr.1bb98ff2.css",
+        "custom.639f7f86.css",
+        "flex_grid_0.0.30.css",
+        "bundle.c60a6d54.css",
+        "atomic.ltr.af849556.css",
+        "atomic.ltr.4fdccfb2.css",
+        "viewer.883a204d.css",
+        "atomic.ltr.026cde15.css",
+        "atomic.desktop.ltr.0532ebc1.css",
+        "atomic.ltr.b758be6b.css",
+        "atomic.desktop.ltr.f8ba6727.css",
+        "video_styles_0.0.69.css",
+        "atomic.ltr.cda55dbc.css",
+        "atomic.ltr.08d076fe.css",
+        "atomic.desktop.ltr.5bc34190.css",
+        "b89b3da.caas-scrappy.min.css",
+        "tdv2-wafer-horoscope.9122b1d8.js",
+        "yaft-plugin-aftnoad-0.1.5.min.js",
+        "tdv2-wafer-header.desktop.91433137.js",
+        "wf-rapid-1.1.2-modern.js",
+        "tdv2-wafer-utils.1db6b956.js",
+        "wf-text-1.1.2-modern.js",
+        "wf-bind-1.1.0-modern.js",
+        "wf-darla-1.0.10-modern.js",
+        "wf-countdown-1.2.3-modern.js",
+        "iframe-1.0.15.js",
+        "tdv2-wafer-stream.94f406c6.js",
+        "wf-image-1.1.2-modern.js",
+        "wf-template-1.3.3-modern.js",
+        "wf-geolocation-1.2.7-modern.js",
+        "sda_modern_0.0.23.js",
+        "wf-form-1.12.1-modern.js",
+        "wf-toggle-1.9.1-modern.js",
+        "wf-loader-0.3.59-modern.js",
+        "wf-beacon-1.2.1-modern.js",
+        "wf-tabs-1.9.4-modern.js",
+        "wf-fetch-1.13.1-modern.js",
+        "wf-video-2.6.9-modern.js",
+        "yaft-0.3.27.min.js",
+        "wf-caas-1.8.0-modern.js",
+        "sh-4.1.7.js",
+        "wf-autocomplete-1.14.11-modern.js",
+        "wf-core-1.37.18-modern.js",
+        "homepage-pwa-defer-1.0.2-modern.js",
+        "desktop_1.2.130.js",
+        "ec99137.caas-scrappy.min.js",
+        "g-r-min.js"
+      ]
+    },
+    "2": {
+      "has_successor": [],
+      "no_successor": [
+        "cs_0.2.js",
+        "rapidworker_1_2_0.0.39.js"
+      ]
+    }
+  }
+}

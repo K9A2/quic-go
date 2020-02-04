@@ -10,27 +10,46 @@ from mininet.net import Mininet
 from mininet.node import CPULimitedHost
 from mininet.topo import Topo
 
-# rtt = [10, 50, 100, 200]
-rtt = 20
-# loss = [0.001, 0.01, 0.1, 1.0]
-l = 0.0
-bandwidth = 4
+cable = {
+	'bandwidth': 100,
+	'delay': str(10 / 2) + 'ms',
+	'loss': 0 / 2
+}
+
+wifi = {
+	'bandwidth': 30,
+	'delay': str(20 / 2) + 'ms',
+	'loss': 0 / 2
+}
+
+lte = {
+	'bandwidth': 5,
+	'delay': str(60 / 2) + 'ms',
+	'loss': 0 / 2
+}
+
+current_topo = lte
 
 class SimpleTopology(Topo):
+    """
+    h1 <-> s1 <- bottleneck -> s2 <-> h2
+    """
     def __init__(self):
         Topo.__init__(self)
 
-        sender_name = 'h1'
-        receiver_name = 'h2'
+        sender = self.addHost('h1')
+        receiver = self.addHost('h2')
+        switch_1 = self.addSwitch('s1')
+        switch_2 = self.addSwitch('s2')
 
-        switch_name = 's1'
+        self.addLink(sender, switch_1)
+        self.addLink(receiver, switch_2)
 
-        sender = self.addHost(sender_name)
-        receiver = self.addHost(receiver_name)
-        switch = self.addSwitch(switch_name)
-
-        self.addLink(sender, switch, bw=bandwidth, delay=str(rtt / 4) + 'ms', loss=l)
-        self.addLink(receiver, switch, bw=bandwidth, delay=str(rtt / 4) + 'ms', loss=l)
+        self.addLink(switch_1, switch_2,
+            bw=current_topo['bandwidth'], 
+            delay=current_topo['delay'], 
+            loss=current_topo['loss']
+        )
 
 
 def run():
