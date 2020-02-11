@@ -133,6 +133,7 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 
 	for {
 		sess, err := ln.Accept(context.Background())
+		fmt.Println("accept new quic connection")
 		if err != nil {
 			return err
 		}
@@ -160,8 +161,10 @@ func (s *Server) removeListener(l *quic.Listener) {
 
 func (s *Server) handleResponseFunc(
 	str quic.Stream, responseWriter http.ResponseWriter, req *http.Request) {
+	// quic.ConcurrentStreamCounter.OnStart()
 	// 返回响应体
 	s.handleRequest(str, responseWriter, req)
+	// quic.ConcurrentStreamCounter.OnFinish()
 	// 在发送完响应体之后关闭对应的 stream
 	str.Close()
 }
@@ -192,9 +195,9 @@ func (s *Server) handleConn(sess quic.Session) {
 		responseWriter, request := s.decodeRequest(str, decoder)
 		// 把该 ResponseWriter 添加到调度器中
 		// fmt.Printf("accept request <%v>\n", request.RequestURI)
-		sess.Scheduler().AddNewResponseWriter(responseWriter, request, str, s.Handler)
+		// sess.Scheduler().AddNewResponseWriter(responseWriter, request, str, s.Handler)
 		// 在新起的 go 程中处理 request 和 response
-		// go s.handleResponseFunc(str, responseWriter, request)
+		go s.handleResponseFunc(str, responseWriter, request)
 	}
 }
 

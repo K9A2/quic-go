@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	quic "github.com/lucas-clemente/quic-go"
-
 	"golang.org/x/net/http/httpguts"
 )
 
@@ -114,7 +113,9 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 
 // RoundTrip does a round trip.
 func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	return r.RoundTripOpt(req, RoundTripOpt{})
+	return r.RoundTripOpt(req, RoundTripOpt{
+		OnlyCachedConn: false,
+	})
 }
 
 func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTripper, error) {

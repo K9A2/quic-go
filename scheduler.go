@@ -1,10 +1,32 @@
 package quic
 
 import (
+	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/order"
 )
+
+type concurrentStreamCounter struct {
+	mutex   sync.Mutex
+	counter int
+}
+
+func (c *concurrentStreamCounter) OnStart() {
+	c.mutex.Lock()
+	c.counter++
+	fmt.Printf("%d\n", c.counter)
+	c.mutex.Unlock()
+}
+
+func (c *concurrentStreamCounter) OnFinish() {
+	c.mutex.Lock()
+	c.counter--
+	c.mutex.Unlock()
+}
+
+var ConcurrentStreamCounter = concurrentStreamCounter{}
 
 // ResponseWriterScheduler 是调度器的抽象接口，所有调度器都必须实现接口中所定义的全部方法
 type ResponseWriterScheduler interface {
@@ -36,8 +58,8 @@ func newResponseWriterControlBlock(writer http.ResponseWriter,
 }
 
 var (
-	currentScheduler = staticOrderSchedulerName
-	// currentScheduler = roundRobinSchedulerName
+	// currentScheduler = staticOrderSchedulerName
+	currentScheduler = roundRobinSchedulerName
 	currentOrderList = order.YahooPerformanceList
 )
 
@@ -47,10 +69,12 @@ func InitResponseWriterScheduler() ResponseWriterScheduler {
 	switch currentScheduler {
 	case roundRobinSchedulerName:
 		{
+			// fmt.Printf("using %v\n", roundRobinSchedulerName)
 			scheduler = NewRoundRobinScheduler()
 		}
 	case staticOrderSchedulerName:
 		{
+			// fmt.Printf("using %v\n", staticOrderSchedulerName)
 			scheduler = NewStaticOrderScheduler()
 		}
 	}

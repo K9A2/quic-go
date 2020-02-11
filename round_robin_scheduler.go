@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 )
@@ -14,6 +15,8 @@ type RoundRobinScheduler struct {
 
 	// 当有新的 ResponseWriter 就绪时把该 ResponseWriter 投入此 chan 中
 	blockArriveChan chan *ResponseWriterControlBlock
+	// 并行 go 程数目
+	concurrentStreamNumber uint16
 }
 
 // NewRoundRobinScheduler 初始化一个 roundRobinScheduler 实例并返回其指针
@@ -65,8 +68,25 @@ func (schd *RoundRobinScheduler) popNextResponseWriter() *ResponseWriterControlB
 
 // executeResponseWriter 实际执行给定的 ResponseWriter
 func (schd *RoundRobinScheduler) executeResponseWriter(block *ResponseWriterControlBlock) {
+	schd.onStart()
 	// 执行该 ResponseWriter
 	block.handler.ServeHTTP(*block.writer, block.request)
 	// ResponseWriter 执行完之后需要手动关闭对应的 QUIC Stream
 	block.str.Close()
+	schd.onFinish()
+}
+
+// 在调度器开始返回新的响应体时被触发
+func (schd *RoundRobinScheduler) onStart() {
+	schd.mutex.Lock()
+	schd.concurrentStreamNumber++
+	fmt.Printf("%d\n", schd.concurrentStreamNumber)
+	schd.mutex.Unlock()
+}
+
+// 在响应体返回后触发
+func (schd *RoundRobinScheduler) onFinish() {
+	schd.mutex.Lock()
+	schd.concurrentStreamNumber--
+	schd.mutex.Unlock()
 }
