@@ -43,7 +43,7 @@ func NewStaticOrderScheduler() *StaticOrderScheduler {
 		ManagedResponseWriter:   make([]*ResponseWriterControlBlock, len(currentOrderList)),
 		ManagedURLMap:           make(map[string]int),
 		UnmanagedResponseWriter: make([]*ResponseWriterControlBlock, 0),
-		tryRunChan:              make(chan struct{}, 10),
+		tryRunChan:              make(chan struct{}, 100),
 	}
 	// 写入传输顺序
 	for index, url := range currentOrderList {

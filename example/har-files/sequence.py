@@ -8,7 +8,8 @@ VALIDATED_COMMANDS = [
     'static-file-size',
     'performance',
     # 从网络加载顺序生成加载顺序
-    'network'
+    'network',
+    'simbrowser'
 ]
 
 KEY_RESOURCE_TYPE = 'resource_type'
@@ -431,6 +432,65 @@ def command_network(argv):
     dump_object_to_json_file({ 'final_order': final_order }, output_file_name)
 
 
+def extract_load_path(har_file_json):
+    entries = har_file_json['log']
+
+    result = []
+    root_request_url = ''
+
+    entries_added = set()
+    for entry in entries:
+        url = entry['url']
+
+        if url in entries_added:
+            # 不处理重复发送的请求
+            continue
+        entries_added.add(url)
+
+        initiator = entry['initiator']
+
+        new_entry = {
+            'url': get_file_name(url),
+        }
+
+        if root_request_url == '':
+            root_request_url = url
+
+        initiator_type = initiator['type']
+        if initiator_type == 'parser' or initiator_type == 'other':
+            new_entry['dep'] = [get_file_name(root_request_url)]
+            result.append(new_entry)
+            continue
+
+        has_stack = 'stack' in initiator
+        if has_stack:
+            # 用深度优先搜索找出所有依赖项，然后逆序并去重
+            deps_list = get_call_stack(initiator['stack'])
+            deps_list.reverse()
+            added_deps = set()
+            final_dep_list = []
+            for dep in deps_list:
+                if dep not in added_deps:
+                    final_dep_list.append(dep)
+                    added_deps.add(dep)
+            new_entry['dep'] = final_dep_list
+            # 从函数调用栈中提取文件调用顺序
+            result.append(new_entry)
+
+    return result
+
+
+def command_simbrowser(argv):
+    """
+    根据移除了内容的 har 文件生成所有属于 www.stormlin.com 的请求及其加载路径
+    """
+    har_file_path = argv[0]
+    output_file_name = argv[1]
+    har_file_json = load_json_file(har_file_path)
+    nodes_with_deps = extract_load_path(har_file_json)
+    dump_object_to_json_file({ 'nodes_with_deps': nodes_with_deps }, output_file_name)
+
+
 def remove_deulicated_resource(resource_list):
     """
     移除所有具有重复 url 的资源，并返回移除重复项之后的资源列表
@@ -592,6 +652,10 @@ def main(argv):
     elif command == 'network':
         print('executing command <%s>' % command)
         command_network(argv[1:])
+        return
+    elif command == 'simbrowser':
+        print('executing command <%s>' % command)
+        command_simbrowser(argv[1:])
         return
     elif command == 'static-file-size':
         command_static_file_size(argv[1:])

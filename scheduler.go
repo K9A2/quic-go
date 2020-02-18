@@ -58,9 +58,9 @@ func newResponseWriterControlBlock(writer http.ResponseWriter,
 }
 
 var (
-	// currentScheduler = staticOrderSchedulerName
-	currentScheduler = roundRobinSchedulerName
-	currentOrderList = order.YahooPerformanceList
+	currentScheduler = staticOrderSchedulerName
+	// currentScheduler = roundRobinSchedulerName
+	currentOrderList = order.YoutubeNetworkList
 )
 
 // InitResponseWriterScheduler 根据配置的调度器类型初始化对应的调度器实例

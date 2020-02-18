@@ -1,3 +1,4 @@
+# /usr/bin/python
 # coding:utf-8
 
 import os
@@ -28,7 +29,7 @@ lte = {
 	'loss': 0 / 2
 }
 
-current_topo = lte
+current_topo = wifi
 
 class SimpleTopology(Topo):
     """

@@ -24,7 +24,7 @@ func NewRoundRobinScheduler() *RoundRobinScheduler {
 	return &RoundRobinScheduler{
 		mutex:           sync.Mutex{},
 		name:            roundRobinSchedulerName,
-		blockArriveChan: make(chan *ResponseWriterControlBlock, 100),
+		blockArriveChan: make(chan *ResponseWriterControlBlock, 300),
 	}
 }
 

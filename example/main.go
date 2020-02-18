@@ -24,6 +24,12 @@ func (h *h3FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// go func() {
+	// 	for {
+	// 		fmt.Println(runtime.NumGoroutine())
+	// 		time.Sleep(time.Duration(1) * time.Second)
+	// 	}
+	// }()
 	// 同时运行 HTTP/3 和 HTTP/2 服务器
 	log.Fatal(http3.ListenAndServe("0.0.0.0:443", "cert.pem", "cert.key", newH3FileServer()))
 }

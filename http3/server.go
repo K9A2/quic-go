@@ -133,7 +133,7 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 
 	for {
 		sess, err := ln.Accept(context.Background())
-		fmt.Println("accept new quic connection")
+		// fmt.Println("accept new quic connection")
 		if err != nil {
 			return err
 		}
