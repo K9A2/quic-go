@@ -29,9 +29,10 @@ type sealer interface {
 }
 
 type payload struct {
-	frames []ackhandler.Frame
-	ack    *wire.AckFrame
-	length protocol.ByteCount
+	frames            []ackhandler.Frame
+	ack               *wire.AckFrame
+	length            protocol.ByteCount
+	containsPingFrame bool // payload 中是否包含 ping 帧
 }
 
 type packedPacket struct {
@@ -121,6 +122,8 @@ type sealingManager interface {
 type frameSource interface {
 	AppendStreamFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
 	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
+
+	GetPingFrameSignal() *[]bool
 }
 
 type ackFrameSource interface {
@@ -398,6 +401,9 @@ func (p *packetPacker) maybePackAppDataPacket() (*packedPacket, error) {
 		p.numNonAckElicitingAcks = 0
 	}
 
+	if payload.containsPingFrame {
+		fmt.Println("this packet contains ping frame, packet number: ", header.PacketNumber)
+	}
 	return p.writeAndSealPacket(header, payload, protocol.Encryption1RTT, sealer)
 }
 
@@ -425,6 +431,14 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) payloa
 	var lengthAdded protocol.ByteCount
 	payload.frames, lengthAdded = p.framer.AppendControlFrames(payload.frames, maxFrameSize-payload.length)
 	payload.length += lengthAdded
+
+	// 检查 payload 中是否包含 ping 帧
+	if len(*p.framer.GetPingFrameSignal()) > 0 {
+		// payload 中包含一个 ping 帧
+		payload.containsPingFrame = true
+		// 取走这一个信号
+		*p.framer.GetPingFrameSignal() = (*p.framer.GetPingFrameSignal())[:1]
+	}
 
 	payload.frames, lengthAdded = p.framer.AppendStreamFrames(payload.frames, maxFrameSize-payload.length)
 	payload.length += lengthAdded

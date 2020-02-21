@@ -113,6 +113,7 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 
 // RoundTrip does a round trip.
 func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	fmt.Println(req.URL.RequestURI())
 	return r.RoundTripOpt(req, RoundTripOpt{
 		OnlyCachedConn: false,
 	})

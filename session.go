@@ -185,6 +185,21 @@ type session struct {
 	logger utils.Logger
 
 	Schd ResponseWriterScheduler
+
+	manager *pingTestManager
+}
+
+type pingTestManager struct {
+	// PING 帧所在的数据包序号
+	PacketNumber protocol.PacketNumber
+	// PING 帧发出的时间
+	PacketSentTime int64
+	// PING 帧收到的时间
+	PacketReceivedTime int64
+}
+
+func newPingTestManager() *pingTestManager {
+	return &pingTestManager{}
 }
 
 func (s *session) Scheduler() ResponseWriterScheduler {
@@ -300,6 +315,8 @@ var newSession = func(
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 
 	s.conn.Init()
+
+	s.manager = newPingTestManager()
 
 	return s
 }
@@ -557,6 +574,12 @@ runLoop:
 	s.cryptoStreamHandler.Close()
 	s.sendQueue.Close()
 	return closeErr.err
+}
+
+func (s *session) PerformPingTest() int64 {
+	fmt.Println("perform ping test")
+	s.framer.QueueControlFrame(&wire.PingFrame{})
+	return 0
 }
 
 // blocks until the early session can be used

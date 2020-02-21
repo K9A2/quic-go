@@ -3,7 +3,6 @@ package quic
 import (
 	"sync"
 
-	// "github.com/google/logger"
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -16,6 +15,9 @@ type framer interface {
 
 	AddActiveStream(protocol.StreamID)
 	AppendStreamFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
+
+	// 获取 ping 帧信号队列
+	GetPingFrameSignal() *[]bool
 }
 
 type framerI struct {
@@ -30,7 +32,9 @@ type framerI struct {
 	controlFrameMutex sync.Mutex
 	controlFrames     []wire.Frame
 
-	// scheduler *FileTypeScheduler
+	// 数据包包含 ping 帧的队列，framer 在侦测到控制帧队列中包含 ping 帧之后，
+	// 需要向此数组追加一个 bool 变量，以表明后续的 payload 中包含 ping 帧
+	pingFrameSignal []bool
 }
 
 var _ framer = &framerI{}
@@ -43,8 +47,11 @@ func newFramer(
 		streamGetter:  streamGetter,
 		activeStreams: make(map[protocol.StreamID]struct{}),
 		version:       v,
-		// scheduler: NewFileTypeScheduler(),
 	}
+}
+
+func (f *framerI) GetPingFrameSignal() *[]bool {
+	return &f.pingFrameSignal
 }
 
 func (f *framerI) QueueControlFrame(frame wire.Frame) {
@@ -55,12 +62,17 @@ func (f *framerI) QueueControlFrame(frame wire.Frame) {
 
 func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 	var length protocol.ByteCount
+	// 是否包含 ping 帧
 	f.controlFrameMutex.Lock()
 	for len(f.controlFrames) > 0 {
 		frame := f.controlFrames[len(f.controlFrames)-1]
 		frameLen := frame.Length(f.version)
 		if length+frameLen > maxLen {
 			break
+		}
+		switch frame.(type) {
+		case *wire.PingFrame:
+			f.pingFrameSignal = append(f.pingFrameSignal, true)
 		}
 		frames = append(frames, ackhandler.Frame{Frame: frame})
 		length += frameLen

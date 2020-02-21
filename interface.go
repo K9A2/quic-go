@@ -188,6 +188,9 @@ type Session interface {
 	ConnectionState() tls.ConnectionState
 
 	Scheduler() ResponseWriterScheduler
+
+	// 指示该连接进行一次 PING 测试，返回值为该次 PING 测试的毫秒，单位为毫秒
+	PerformPingTest() int64
 }
 
 // An EarlySession is a session that is handshaking.

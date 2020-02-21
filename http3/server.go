@@ -194,7 +194,7 @@ func (s *Server) handleConn(sess quic.Session) {
 		// 解析请求并构造对应的 ResponseWriter
 		responseWriter, request := s.decodeRequest(str, decoder)
 		// 把该 ResponseWriter 添加到调度器中
-		// fmt.Printf("accept request <%v>\n", request.RequestURI)
+		fmt.Printf("accept request <%v>\n", request.RequestURI)
 		// sess.Scheduler().AddNewResponseWriter(responseWriter, request, str, s.Handler)
 		// 在新起的 go 程中处理 request 和 response
 		go s.handleResponseFunc(str, responseWriter, request)
