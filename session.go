@@ -186,20 +186,7 @@ type session struct {
 
 	Schd ResponseWriterScheduler
 
-	manager *pingTestManager
-}
-
-type pingTestManager struct {
-	// PING 帧所在的数据包序号
-	PacketNumber protocol.PacketNumber
-	// PING 帧发出的时间
-	PacketSentTime int64
-	// PING 帧收到的时间
-	PacketReceivedTime int64
-}
-
-func newPingTestManager() *pingTestManager {
-	return &pingTestManager{}
+	ptm *pingTestManager
 }
 
 func (s *session) Scheduler() ResponseWriterScheduler {
@@ -297,6 +284,11 @@ var newSession = func(
 		logger,
 	)
 	s.cryptoStreamHandler = cs
+
+	if s.ptm == nil {
+		s.ptm = newPingTestManager(s)
+	}
+
 	s.packer = newPacketPacker(
 		srcConnID,
 		s.connIDManager.Get,
@@ -310,13 +302,12 @@ var newSession = func(
 		s.receivedPacketHandler,
 		s.perspective,
 		s.version,
+		s.ptm,
 	)
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 
 	s.conn.Init()
-
-	s.manager = newPingTestManager()
 
 	return s
 }
@@ -400,6 +391,11 @@ var newClientSession = func(
 	s.clientHelloWritten = clientHelloWritten
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
+
+	if s.ptm == nil {
+		s.ptm = newPingTestManager(s)
+	}
+
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.packer = newPacketPacker(
 		srcConnID,
@@ -414,6 +410,7 @@ var newClientSession = func(
 		s.receivedPacketHandler,
 		s.perspective,
 		s.version,
+		s.ptm,
 	)
 	if len(tlsConf.ServerName) > 0 {
 		s.tokenStoreKey = tlsConf.ServerName
@@ -450,7 +447,11 @@ func (s *session) preSetup() {
 		s.perspective,
 		s.version,
 	)
-	s.framer = newFramer(s.streamsMap, s.version)
+	if s.ptm == nil {
+		// 尚未初始化
+		s.ptm = newPingTestManager(s)
+	}
+	s.framer = newFramer(s.streamsMap, s.version, s.ptm)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -476,6 +477,15 @@ func (s *session) preSetup() {
 func (s *session) run() error {
 	defer s.ctxCancel()
 
+	if s.ptm == nil {
+		// ptm 实例还没有被初始化
+		fmt.Println("ptm has not been inited, init a new one")
+		s.ptm = newPingTestManager(s)
+	} else {
+		// 在其他 go 程运行 ptm 主线程
+		go s.ptm.run()
+	}
+
 	go s.cryptoStreamHandler.RunHandshake()
 	go func() {
 		if err := s.sendQueue.Run(); err != nil {
@@ -494,6 +504,8 @@ func (s *session) run() error {
 	}
 
 	var closeErr closeError
+
+	s.ptm.toSendNextPingFrame <- struct{}{}
 
 runLoop:
 	for {
@@ -576,10 +588,8 @@ runLoop:
 	return closeErr.err
 }
 
-func (s *session) PerformPingTest() int64 {
-	fmt.Println("perform ping test")
-	s.framer.QueueControlFrame(&wire.PingFrame{})
-	return 0
+func (s *session) GetConnectionRTT() float64 {
+	return s.ptm.GetRTT()
 }
 
 // blocks until the early session can be used
@@ -1006,6 +1016,27 @@ func (s *session) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame)
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
+	s.ptm.Mutex.Lock()
+	if len(s.ptm.PingPacketNumbers) > 0 {
+		// 有已经发出去的 ping 包，需要检查这些 ping 包是否被确认收到
+		for index, packetNumber := range s.ptm.PingPacketNumbers {
+			if frame.AcksPacket(packetNumber) {
+				sendTime, ok := s.ptm.packetNumberMap[packetNumber]
+				if !ok {
+					fmt.Println("map missed")
+					continue
+				}
+				// 从队列中移除该 ping 包序号
+				s.ptm.PingPacketNumbers = append(s.ptm.PingPacketNumbers[:index], s.ptm.PingPacketNumbers[index+1:]...)
+				delete(s.ptm.packetNumberMap, packetNumber)
+				// 立刻向 ptm 实例主线程发送收到 ping 包确认的信号
+				s.ptm.newRTTSampleChan <- time.Now().Sub(sendTime).Milliseconds()
+				break
+			}
+		}
+	}
+	s.ptm.Mutex.Unlock()
+
 	if err := s.sentPacketHandler.ReceivedAck(frame, pn, encLevel, s.lastPacketReceivedTime); err != nil {
 		return err
 	}

@@ -15,9 +15,6 @@ type framer interface {
 
 	AddActiveStream(protocol.StreamID)
 	AppendStreamFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
-
-	// 获取 ping 帧信号队列
-	GetPingFrameSignal() *[]bool
 }
 
 type framerI struct {
@@ -32,9 +29,8 @@ type framerI struct {
 	controlFrameMutex sync.Mutex
 	controlFrames     []wire.Frame
 
-	// 数据包包含 ping 帧的队列，framer 在侦测到控制帧队列中包含 ping 帧之后，
-	// 需要向此数组追加一个 bool 变量，以表明后续的 payload 中包含 ping 帧
-	pingFrameSignal []bool
+	// 来自上层的 ptm 指针，用于在协议的不同层次之间共享变量
+	ptm *pingTestManager
 }
 
 var _ framer = &framerI{}
@@ -42,16 +38,14 @@ var _ framer = &framerI{}
 func newFramer(
 	streamGetter streamGetter,
 	v protocol.VersionNumber,
+	ptm *pingTestManager,
 ) framer {
 	return &framerI{
 		streamGetter:  streamGetter,
 		activeStreams: make(map[protocol.StreamID]struct{}),
 		version:       v,
+		ptm:           ptm,
 	}
-}
-
-func (f *framerI) GetPingFrameSignal() *[]bool {
-	return &f.pingFrameSignal
 }
 
 func (f *framerI) QueueControlFrame(frame wire.Frame) {
@@ -72,7 +66,7 @@ func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol
 		}
 		switch frame.(type) {
 		case *wire.PingFrame:
-			f.pingFrameSignal = append(f.pingFrameSignal, true)
+			f.ptm.AddPingPacketSignal()
 		}
 		frames = append(frames, ackhandler.Frame{Frame: frame})
 		length += frameLen

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
 )
@@ -60,19 +61,9 @@ func clientMain() error {
 		return err
 	}
 
-	session.PerformPingTest()
-
-	stream, err := session.OpenUniStreamSync(context.Background())
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("unistream opened")
-
-	_, err = stream.Write([]byte("fuck"))
-	// _, err = stream.Write()
-	if err != nil {
-		return err
+	for i := 0; i < 50; i++ {
+		fmt.Println("rtt =", session.GetConnectionRTT())
+		time.Sleep(time.Duration(1) * time.Second)
 	}
 
 	return nil

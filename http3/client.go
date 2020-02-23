@@ -21,7 +21,7 @@ const defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
 
 var defaultQuicConfig = &quic.Config{
 	MaxIncomingStreams: -1, // don't allow the server to create bidirectional streams
-	KeepAlive:          true,
+	// KeepAlive:          true,
 }
 
 var dialAddr = quic.DialAddr

@@ -11,7 +11,7 @@ from mininet.net import Mininet
 from mininet.node import CPULimitedHost
 from mininet.topo import Topo
 
-link_loss = 1.0
+link_loss = 0.1
 
 class SimpleTopology(Topo):
     def __init__(self):

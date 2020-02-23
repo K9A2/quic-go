@@ -189,8 +189,9 @@ type Session interface {
 
 	Scheduler() ResponseWriterScheduler
 
-	// 指示该连接进行一次 PING 测试，返回值为该次 PING 测试的毫秒，单位为毫秒
-	PerformPingTest() int64
+	// 获取该链接的应用层延迟，当返回值为负数时，表明该连接尚未收集到任何延迟样本
+	// 应用层不应使用值为负数的结果。
+	GetConnectionRTT() float64
 }
 
 // An EarlySession is a session that is handshaking.
