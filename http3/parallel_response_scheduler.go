@@ -9,8 +9,11 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,10 +33,26 @@ const styleSheetQueueIndex = 2
 const scriptQueueIndex = 3
 const otherQueueIndex = 4
 
+const documentQueueFileType = "html"
+const styleSheetQueueFileType = "css"
+const scriptQueueFileType = "javascript"
+
+// getQueueIndexByMimeType 根据给出的 mimeType 返回这个资源应当加入的队列序号
+func getQueueIndexByMimeType(mimeType string) int {
+	if strings.Contains(mimeType, documentQueueFileType) {
+		return documentQueueIndex
+	} else if strings.Contains(mimeType, styleSheetQueueFileType) {
+		return styleSheetQueueIndex
+	} else if strings.Contains(mimeType, scriptQueueFileType) {
+		return scriptQueueIndex
+	}
+	return otherQueueIndex
+}
+
 // 是调度器中原始 quicSession 的一个封装
 type sessionControlblock struct {
-	session *quic.Session // 对应的 quic 连接
-	idle    bool          // 该连接是否处于空闲状态
+	session       *quic.Session // 对应的 quic 连接
+	canDispatched bool          // 该连接是否能够被调度器用于承载其他请求
 
 	dataToFetch int // 还需要加载的字节数
 
@@ -200,8 +219,8 @@ func (scheduler *parallelRequestSchedulerI) getSession() *sessionControlblock {
 			return nil
 		}
 		newSessionControlBlock := &sessionControlblock{
-			session: newSession,
-			idle:    false,
+			session:       newSession,
+			canDispatched: false,
 		}
 		scheduler.openedSessions = append(scheduler.openedSessions, newSessionControlBlock)
 		return newSessionControlBlock
@@ -209,7 +228,7 @@ func (scheduler *parallelRequestSchedulerI) getSession() *sessionControlblock {
 
 	// 已经有了现成的 session，那么就把在这些 session 中找一个空闲的
 	for _, block := range scheduler.openedSessions {
-		if block.idle {
+		if block.canDispatched {
 			// 找到了一个处于空闲状态的 session
 			fmt.Println("found an idle session", len(scheduler.openedSessions))
 			return block
@@ -227,12 +246,12 @@ func (scheduler *parallelRequestSchedulerI) getSession() *sessionControlblock {
 			return nil
 		}
 		scheduler.openedSessions = append(scheduler.openedSessions, &sessionControlblock{
-			session: newSession, idle: true,
+			session: newSession, canDispatched: true,
 		})
 		scheduler.idleSession++
 		newSessionControlBlock := &sessionControlblock{
-			session: newSession,
-			idle:    false,
+			session:       newSession,
+			canDispatched: false,
 		}
 		return newSessionControlBlock
 	}
@@ -259,7 +278,7 @@ func (scheduler *parallelRequestSchedulerI) mayExecute() (*requestControlBlock, 
 	// 从调度器的待执行队列中删去即将执行的 requestControlBlock
 	scheduler.removeFirst(index)
 	// 把即将要使用的 session 标记为繁忙状态
-	availableSession.idle = false
+	availableSession.canDispatched = false
 	return nextRequest, availableSession
 }
 
@@ -321,10 +340,23 @@ func (scheduler *parallelRequestSchedulerI) dial() (*quic.Session, error) {
 func (scheduler *parallelRequestSchedulerI) addNewRequest(block *requestControlBlock) {
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
-	// 现在默认添加到 document 队列中
-	// TODO: 按照请求类型添加到不同的队列中
-	scheduler.documentQueue = append(scheduler.documentQueue, block)
-	// 添加后立刻发出信号给调度器主 go 程
+	mimeType := mime.TypeByExtension(filepath.Ext(block.request.URL.RequestURI()))
+	// 有确定的 mime type，则需要根据给出的 mime type 决定加入到哪一条队列中`
+	switch getQueueIndexByMimeType(mimeType) {
+	case documentQueueIndex:
+		fmt.Println("adding to document queue", block.request.URL.RequestURI())
+		scheduler.documentQueue = append(scheduler.documentQueue, block)
+	case styleSheetQueueIndex:
+		fmt.Println("adding to stylesheet queue", block.request.URL.RequestURI())
+		scheduler.styleSheetQueue = append(scheduler.styleSheetQueue, block)
+	case scriptQueueIndex:
+		fmt.Println("adding to script queue", block.request.URL.RequestURI())
+		scheduler.scriptQueue = append(scheduler.scriptQueue, block)
+	default:
+		fmt.Println("adding to other file queue", block.request.URL.RequestURI())
+		scheduler.otherFileQueue = append(scheduler.otherFileQueue, block)
+	}
+	// 添加后立刻发出信号给调度器主 go 程，由后者负责确定在何时发出该请求
 	scheduler.mayExecuteNextRequest <- struct{}{}
 }
 
