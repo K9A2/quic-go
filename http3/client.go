@@ -1,14 +1,11 @@
 package http3
 
 import (
-	"bytes"
-	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
@@ -31,24 +28,27 @@ type roundTripperOpts struct {
 	MaxHeaderBytes     int64
 }
 
-// client is a HTTP3 client doing requests
-type client struct {
-	tlsConf *tls.Config
-	config  *quic.Config
-	opts    *roundTripperOpts
+// client 是对外暴露的 h3 client 接口
+type client interface {
+	// 实现 HTTP/3 所必须的两个接口
+	http.RoundTripper
+	io.Closer
+}
 
+// client is a HTTP3 client doing requests
+// 负责具体实现 HTTP/3 Client 接口。由此接口负责实现
+type clientI struct {
 	dialOnce     sync.Once
 	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error)
 	handshakeErr error
 
 	requestWriter *requestWriter
 
-	decoder *qpack.Decoder
-
 	hostname string
-	session  quic.Session
 
 	logger utils.Logger
+
+	scheduler parallelRequestScheduler // 调度器实例
 }
 
 func newClient(
@@ -57,7 +57,7 @@ func newClient(
 	opts *roundTripperOpts,
 	quicConfig *quic.Config,
 	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error),
-) *client {
+) client {
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
 	} else {
@@ -71,70 +71,31 @@ func newClient(
 	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
-	return &client{
-		hostname:      authorityAddr("https", hostname),
-		tlsConf:       tlsConf,
-		requestWriter: newRequestWriter(logger),
-		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
-		config:        quicConfig,
-		opts:          opts,
-		dialer:        dialer,
-		logger:        logger,
+	newClient := &clientI{
+		hostname: authorityAddr("https", hostname),
+		dialer:   dialer,
+		logger:   logger,
 	}
+
+	// 初始化调度器实例
+	newClient.scheduler = newParallelRequestScheduler(authorityAddr("https", hostname), tlsConf, quicConfig,
+		newRequestWriter(logger), qpack.NewDecoder(func(hf qpack.HeaderField) {}), opts)
+	// 在别的 go 程中运行调度器实例
+	go newClient.scheduler.run()
+
+	return newClient
 }
 
-func (c *client) dial() error {
-	var err error
-	if c.dialer != nil {
-		c.session, err = c.dialer("udp", c.hostname, c.tlsConf, c.config)
-	} else {
-		c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
-	}
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		if err := c.setupSession(); err != nil {
-			c.logger.Debugf("Setting up session failed: %s", err)
-			c.session.CloseWithError(quic.ErrorCode(errorInternalError), "")
-		}
-	}()
-
-	return nil
-}
-
-func (c *client) setupSession() error {
-	// open the control stream
-	str, err := c.session.OpenUniStream()
-	if err != nil {
-		return err
-	}
-	buf := &bytes.Buffer{}
-	// write the type byte
-	buf.Write([]byte{0x0})
-	// send the SETTINGS frame
-	(&settingsFrame{}).Write(buf)
-	if _, err := str.Write(buf.Bytes()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *client) Close() error {
-	return c.session.Close()
-}
-
-func (c *client) maxHeaderBytes() uint64 {
-	if c.opts.MaxHeaderBytes <= 0 {
-		return defaultMaxResponseHeaderBytes
-	}
-	return uint64(c.opts.MaxHeaderBytes)
+// 目前的实现是关闭同一 client 下打开的所有 quicSession
+func (c *clientI) Close() error {
+	return c.scheduler.close()
 }
 
 // RoundTrip executes a request and returns a response
-func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
+// 在这里把一整个大请求视情况拆分成多个小请求进行并行传输
+// req 是上层来的一整个请求，返回的 response 也是以一整个返回的形式向上层提供
+// 上层并不感知到下发的请求已在此处被拆分成多个请求以在多条信道上并行传输
+func (c *clientI) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.Scheme != "https" {
 		return nil, errors.New("http3: unsupported scheme")
 	}
@@ -142,113 +103,11 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("http3 client BUG: RoundTrip called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
 	}
 
-	c.dialOnce.Do(func() {
-		c.handshakeErr = c.dial()
-	})
-
-	if c.handshakeErr != nil {
-		return nil, c.handshakeErr
-	}
-
-	str, err := c.session.OpenStreamSync(context.Background())
+	resp, err := c.scheduler.addAndWait(req)
 	if err != nil {
+		fmt.Println(err.Error())
 		return nil, err
 	}
 
-	// Request Cancellation:
-	// This go routine keeps running even after RoundTrip() returns.
-	// It is shut down when the application is done processing the body.
-	reqDone := make(chan struct{})
-	go func() {
-		select {
-		case <-req.Context().Done():
-			str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
-			str.CancelRead(quic.ErrorCode(errorRequestCanceled))
-		case <-reqDone:
-		}
-	}()
-
-	rsp, rerr := c.doRequest(req, str, reqDone)
-	if rerr.err != nil { // if any error occurred
-		close(reqDone)
-		if rerr.streamErr != 0 { // if it was a stream error
-			str.CancelWrite(quic.ErrorCode(rerr.streamErr))
-		}
-		if rerr.connErr != 0 { // if it was a connection error
-			var reason string
-			if rerr.err != nil {
-				reason = rerr.err.Error()
-			}
-			c.session.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
-		}
-	}
-	return rsp, rerr.err
-}
-
-func (c *client) doRequest(
-	req *http.Request,
-	str quic.Stream,
-	reqDone chan struct{},
-) (*http.Response, requestError) {
-	var requestGzip bool
-	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
-		requestGzip = true
-	}
-	if err := c.requestWriter.WriteRequest(str, req, requestGzip); err != nil {
-		return nil, newStreamError(errorInternalError, err)
-	}
-
-	frame, err := parseNextFrame(str)
-	if err != nil {
-		return nil, newStreamError(errorFrameError, err)
-	}
-	hf, ok := frame.(*headersFrame)
-	if !ok {
-		return nil, newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
-	}
-	if hf.Length > c.maxHeaderBytes() {
-		return nil, newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, c.maxHeaderBytes()))
-	}
-	headerBlock := make([]byte, hf.Length)
-	if _, err := io.ReadFull(str, headerBlock); err != nil {
-		return nil, newStreamError(errorRequestIncomplete, err)
-	}
-	hfs, err := c.decoder.DecodeFull(headerBlock)
-	if err != nil {
-		// TODO: use the right error code
-		return nil, newConnError(errorGeneralProtocolError, err)
-	}
-
-	res := &http.Response{
-		Proto:      "HTTP/3",
-		ProtoMajor: 3,
-		Header:     http.Header{},
-	}
-	for _, hf := range hfs {
-		switch hf.Name {
-		case ":status":
-			status, err := strconv.Atoi(hf.Value)
-			if err != nil {
-				return nil, newStreamError(errorGeneralProtocolError, errors.New("malformed non-numeric status pseudo header"))
-			}
-			res.StatusCode = status
-			res.Status = hf.Value + " " + http.StatusText(status)
-		default:
-			res.Header.Add(hf.Name, hf.Value)
-		}
-	}
-	respBody := newResponseBody(str, reqDone, func() {
-		c.session.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
-	})
-	if requestGzip && res.Header.Get("Content-Encoding") == "gzip" {
-		res.Header.Del("Content-Encoding")
-		res.Header.Del("Content-Length")
-		res.ContentLength = -1
-		res.Body = newGzipReader(respBody)
-		res.Uncompressed = true
-	} else {
-		res.Body = respBody
-	}
-
-	return res, requestError{}
+	return resp, err
 }

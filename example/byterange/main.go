@@ -97,6 +97,9 @@ func main() {
 			fmt.Println(err.Error())
 			return
 		}
+
+		fmt.Println(req.URL.Hostname(), req.URL.RequestURI())
+
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Println(err.Error())

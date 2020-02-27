@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,11 +11,6 @@ import (
 	quic "github.com/lucas-clemente/quic-go"
 	"golang.org/x/net/http/httpguts"
 )
-
-type roundTripCloser interface {
-	http.RoundTripper
-	io.Closer
-}
 
 // RoundTripper implements the http.RoundTripper interface
 type RoundTripper struct {
@@ -50,7 +44,8 @@ type RoundTripper struct {
 	// Zero means to use a default limit.
 	MaxResponseHeaderBytes int64
 
-	clients map[string]roundTripCloser
+	// 负责保存为每一个 hostname 打开的 client
+	clients map[string]client
 }
 
 // RoundTripOpt are options for the Transport.RoundTripOpt method.
@@ -61,8 +56,6 @@ type RoundTripOpt struct {
 	// will return ErrNoCachedConn.
 	OnlyCachedConn bool
 }
-
-var _ roundTripCloser = &RoundTripper{}
 
 // ErrNoCachedConn is returned when RoundTripper.OnlyCachedConn is set
 var ErrNoCachedConn = errors.New("http3: no cached connection was available")
@@ -103,18 +96,24 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 
+	// hostname 的结果类似于 www.example.com:443
+	// 然后从 client 组中选出一个合适的 client 来实际执行请求
+	// 每一个 hostname 会有不同的 client
 	hostname := authorityAddr("https", hostnameFromRequest(req))
+	// 在本 RoundTripper 实例中获取对应该 hostname 的 client 实例
 	cl, err := r.getClient(hostname, opt.OnlyCachedConn)
 	if err != nil {
 		return nil, err
 	}
+
+	// 调用 client 实例实现的 RoundTrip 接口最终实现数据传输
 	return cl.RoundTrip(req)
 }
 
 // RoundTrip does a round trip.
 func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	fmt.Println(req.URL.RequestURI())
 	return r.RoundTripOpt(req, RoundTripOpt{
+		// OnlyCachedConn 的值为 false 时 RoundTripper 会在需要时建立新的 quic 连接
 		OnlyCachedConn: false,
 	})
 }
@@ -124,7 +123,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 	defer r.mutex.Unlock()
 
 	if r.clients == nil {
-		r.clients = make(map[string]roundTripCloser)
+		r.clients = make(map[string]client)
 	}
 
 	client, ok := r.clients[hostname]
@@ -132,6 +131,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		if onlyCached {
 			return nil, ErrNoCachedConn
 		}
+
 		client = newClient(
 			hostname,
 			r.TLSClientConfig,
@@ -186,4 +186,10 @@ func validMethod(method string) bool {
 // copied from net/http/http.go
 func isNotToken(r rune) bool {
 	return !httpguts.IsTokenRune(r)
+}
+
+// GetConnectionRTT 方法返回本 RoundTripper 所属的 client 的 connection 延迟
+func (r *RoundTripper) GetConnectionRTT() float64 {
+	r.getClient("www.stormlin.com", false)
+	return 0
 }
