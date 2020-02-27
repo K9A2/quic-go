@@ -22,7 +22,7 @@ import (
 const maxSessions = 4
 
 // 默认块大小
-const defaultBlockSize = 128 * 1024
+const defaultBlockSize = 32 * 1024
 
 // 队列名称
 const documentQueueIndex = 1
@@ -192,20 +192,18 @@ func (scheduler *parallelRequestSchedulerI) getNewQuicSession() (*quic.Session, 
 func (scheduler *parallelRequestSchedulerI) getSession() *sessionControlblock {
 	// 如果当前没有立刻可用的 session，就创建一个新的并作为结果返回
 	if len(scheduler.openedSessions) <= 0 {
+		fmt.Println("return initial session")
 		newSession, err := scheduler.getNewQuicSession()
 		if err != nil {
 			// 出错
 			fmt.Println(err.Error())
 			return nil
 		}
-		scheduler.openedSessions = append(scheduler.openedSessions, &sessionControlblock{
-			session: newSession, idle: true,
-		})
-		scheduler.idleSession++
 		newSessionControlBlock := &sessionControlblock{
 			session: newSession,
 			idle:    false,
 		}
+		scheduler.openedSessions = append(scheduler.openedSessions, newSessionControlBlock)
 		return newSessionControlBlock
 	}
 
@@ -213,12 +211,14 @@ func (scheduler *parallelRequestSchedulerI) getSession() *sessionControlblock {
 	for _, block := range scheduler.openedSessions {
 		if block.idle {
 			// 找到了一个处于空闲状态的 session
+			fmt.Println("found an idle session", len(scheduler.openedSessions))
 			return block
 		}
 	}
 
 	// 有了现成的 session，但其中没有空闲的
 	if len(scheduler.openedSessions) < 4 {
+		fmt.Println("no idle session found, create new session")
 		// 还可以开新的 session
 		newSession, err := scheduler.getNewQuicSession()
 		if err != nil {
@@ -498,6 +498,7 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
 		return
 	}
 
+	fmt.Println("main request finished")
 	// 如果主请求下发了子请求，那么也需要等待子请求完成并把所有数据添加到响应体中
 	if reqBlock.subRequestDispatched {
 		bytesTransferredBySubRequests, err := strconv.Atoi(rsp.Header.Get("Content-Length"))
@@ -509,6 +510,7 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
 		for bytesTransferredBySubRequests > 0 {
 			select {
 			case subReq := <-subRequestDone:
+				fmt.Println("sub request finish", subReq.startOffset)
 				respBody.addData(&subReq.data, subReq.startOffset)
 				bytesTransferredBySubRequests -= subReq.contentLength
 			}
@@ -642,6 +644,7 @@ func (scheduler *parallelRequestSchedulerI) execute(
 
 // executeSubRequest 负责在执行子请求，并在子请求执行完成的时候向指定的 chan 中发送读取到的全部数据
 func (scheduler *parallelRequestSchedulerI) executeSubRequest(reqBlock *requestControlBlock) {
+	fmt.Println("executing subrequest", reqBlock.bytesStartOffset, reqBlock.bytesEndOffset)
 	subRequest, err := http.NewRequest(http.MethodGet, reqBlock.url, nil)
 	if err != nil {
 		fmt.Println(err.Error())
