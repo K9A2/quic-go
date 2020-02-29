@@ -806,7 +806,8 @@ func (scheduler *parallelRequestSchedulerI) executeSubRequest(reqBlock *requestC
 		// 更新读取本分段的平均带宽
 		reqBlock.designatedSession.bandwdith = bandwidth
 	}
-
+	// 把该 session 标记为可用状态
+	reqBlock.designatedSession.canDispatched = true
 	resp.Body.Close()
 
 	controlBlock := &subRequestControlBlock{
