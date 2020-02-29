@@ -265,7 +265,6 @@ func (scheduler *parallelRequestSchedulerI) getSession() *sessionControlblock {
 		if block.canDispatched {
 			// 找到了一个处于空闲状态的 session
 			// fmt.Println("found an idle session", len(scheduler.openedSessions))
-			block.canDispatched = false
 			return block
 		}
 	}
@@ -362,6 +361,10 @@ func (scheduler *parallelRequestSchedulerI) dial() (*quic.Session, error) {
 func (scheduler *parallelRequestSchedulerI) addNewRequest(block *requestControlBlock) {
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
+	if block.request.URL.RequestURI() == "/" {
+		fmt.Println("adding to document queue", block.request.URL.RequestURI())
+		scheduler.documentQueue = append(scheduler.documentQueue, block)
+	}
 	mimeType := mime.TypeByExtension(filepath.Ext(block.request.URL.RequestURI()))
 	// 有确定的 mime type，则需要根据给出的 mime type 决定加入到哪一条队列中`
 	switch getQueueIndexByMimeType(mimeType) {
@@ -403,7 +406,6 @@ func (scheduler *parallelRequestSchedulerI) addAndWait(req *http.Request) (*http
 
 // getTimeToFinish 函数计算在当前情况下，包含请求就绪在内的传输完所有数据需要的时间
 func getTimeToFinish(remainingDataLen int, bandwidth float64, rtt float64, newDataLen int) float64 {
-	// TODO: 把所有时间单位都换成秒，带宽单位都换成 Bps
 	timeToAvailable := float64(remainingDataLen) / bandwidth
 	if timeToAvailable < rtt {
 		timeToAvailable = rtt
@@ -488,6 +490,7 @@ func (scheduler *parallelRequestSchedulerI) shoudUseParallelTransmission(
 	startOffset := receivedBytesCount + mainSessionAdjustedEndOffset
 
 	// 计算各子请求应当传输的数据块
+	// TODO: 把数据的分布改成 raid 0 一样的条状分布
 	for _, block := range subReqeuestSessions {
 		if remainingDataSubReqs < 0 {
 			break
@@ -553,6 +556,10 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
 	mainRequestURL := fmt.Sprintf("%s://%s%s", req.URL.Scheme, req.URL.Hostname(), req.URL.RequestURI())
 	for remainingDataLen > 0 {
 		// TODO: 实现提前一个 RTT 发起请求的功能
+		if remainingDataLen <= defaultBlockSize {
+			// 还有一块的传输任务，可以通知调度器下发下一个请求了
+			scheduler.mayExecuteNextRequest <- struct{}{}
+		}
 		// 把数据写入到 mainBuffer 中
 		written, bandwidth, err := readData(remainingDataLen, &mainBuffer, rsp)
 		if err != nil {
@@ -593,8 +600,6 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
 	// 立刻把承载该请求的 session 改为可调度状态
 	// TODO: 目前的实现为读取完数据之后再声明为可用，实际上要求在读取完成前一个 RTT 时即声明可用以避免网络空闲
 	reqBlock.designatedSession.canDispatched = true
-	// 发送信号给调度器，以提供一个调度的机会
-	scheduler.mayExecuteNextRequest <- struct{}{}
 
 	// 把主请求读取的数据添加到响应体中
 	respBody := newSegmentedResponseBody()
@@ -628,6 +633,7 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
 	finalResponse := &http.Response{
 		Proto:      "HTPP/3",
 		ProtoMajor: 3,
+		StatusCode: rsp.StatusCode,
 		Header:     rsp.Header.Clone(),
 		Body:       respBody,
 	}
@@ -782,6 +788,10 @@ func (scheduler *parallelRequestSchedulerI) executeSubRequest(reqBlock *requestC
 	}
 	for remainingDataLen > 0 {
 		// TODO: 实现提前一个 RTT 发起请求的功能
+		if remainingDataLen <= defaultBlockSize {
+			// 发送信号给调度器以触发下一请求
+			scheduler.mayExecuteNextRequest <- struct{}{}
+		}
 		// 把数据写入到 mainBuffer 中
 		written, bandwidth, err := readData(remainingDataLen, &dataBuffer, resp)
 		if err != nil {

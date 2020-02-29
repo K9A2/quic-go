@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -73,6 +74,7 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	defer resp.Body.Close()
 
 	copyHeader(wr.Header(), resp.Header)
+	fmt.Println("resp.StatusCode", resp.StatusCode)
 	wr.WriteHeader(resp.StatusCode)
 	io.Copy(wr, resp.Body)
 	log.Printf("request finished <%v>", requestURL)
