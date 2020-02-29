@@ -62,7 +62,8 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	// h2Client := &http.Client{}
 
 	// 根据客户端的请求重新生成到远程服务器的请求
-	resp, err := h3Client.Get("https://" + hostname + requestURL)
+	req, err := http.NewRequest(http.MethodGet, "https://"+hostname+requestURL, nil)
+	resp, err := h3Client.Do(req)
 	if err != nil {
 		http.Error(wr, "Server Error", http.StatusInternalServerError)
 		log.Printf("ServeHTTP: %v", err)

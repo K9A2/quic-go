@@ -80,7 +80,8 @@ var createClientLock sync.Mutex
 
 func main() {
 	var result int64
-	for i := 0; i < 50; i++ {
+	repeatFor := 50
+	for i := 0; i < repeatFor; i++ {
 		fmt.Println(i)
 		timeStart := time.Now()
 		url := "https://www.stormlin.com/4MB"
@@ -136,5 +137,5 @@ func main() {
 		timeUsed := timeEnd.Sub(timeStart).Milliseconds()
 		result += timeUsed
 	}
-	fmt.Println(result / 50)
+	fmt.Println(result / int64(repeatFor))
 }
