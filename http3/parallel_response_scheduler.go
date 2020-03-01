@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"mime"
 	"net/http"
@@ -32,9 +33,16 @@ const styleSheetQueueIndex = 2
 const scriptQueueIndex = 3
 const otherQueueIndex = 4
 
+// 各队列对应的文件的 mime 类型关键字
 const documentQueueFileType = "html"
 const styleSheetQueueFileType = "css"
 const scriptQueueFileType = "javascript"
+
+// 错误定义
+var errHostNotConnected = errors.New("can not connect to given host")    // 连不上对端主机
+var errNoAvailableSession = errors.New("no available session")           // 找不到指定的
+var errCanNotExecuteRequest = errors.New("can not execute this request") // 无法执行此请求
+var errNoAvailableRequest = errors.New("no available request")           // 队列中没有待处理的下一请求
 
 // getQueueIndexByMimeType 根据给出的 mimeType 返回这个资源应当加入的队列序号
 func getQueueIndexByMimeType(mimeType string) int {
@@ -46,23 +54,6 @@ func getQueueIndexByMimeType(mimeType string) int {
 		return scriptQueueIndex
 	}
 	return otherQueueIndex
-}
-
-// 是调度器中原始 quicSession 的一个封装
-type sessionControlblock struct {
-	id int
-
-	session       *quic.Session // 对应的 quic 连接
-	canDispatched bool          // 该连接是否能够被调度器用于承载其他请求
-
-	dataToFetch int // 还需要加载的字节数
-
-	// 基于最新样本计算的信道参数
-	rtt       float64 // 该连接的 rtt
-	bandwdith float64 // 该连接的带宽
-
-	pendingRequest   int // 该 session 上承载的请求数目
-	remainingDataLen int // 该 session 上仍需加载的数据量
 }
 
 // pseudoRequestControlBlock 用来在正式创建请求之前确定该请求应当负责的数据范围
@@ -85,15 +76,17 @@ func newPseudoRequestControlBlock(
 }
 
 type requestControlBlock struct {
-	isMainSession        bool // 是否为主请求
-	bytesStartOffset     int  // 响应体开始位置，用于让主请求拼装为完成的请求
-	bytesEndOffset       int  // 响应体结束位置，同上
-	subRequestDispatched bool // 是否已经下发子请求
+	isMainSession                bool // 是否为主请求
+	bytesStartOffset             int  // 响应体开始位置，用于让主请求拼装为完成的请求
+	bytesEndOffset               int  // 响应体结束位置，同上
+	shoudUseParallelTransmission bool // 是否需要使用并行传输
+	subRequestDispatched         bool // 是否已经下发子请求
 
 	url            string                        // 请求的 url，只在子请求是使用
 	request        *http.Request                 // 对应的 http 请求
 	requestDone    *chan struct{}                // 调度器完成该 http 请求时向该 chan 发送消息
 	subRequestDone *chan *subRequestControlBlock // 子请求完成时向该 chan 发送消息
+	requestError   *chan struct{}                // 出现任何错误时向该 chan 发送信息
 
 	response       *http.Response // 已经处理完成的 response，可以返回上层应用
 	contentLength  int            // 响应体字节数
@@ -116,7 +109,7 @@ type parallelRequestScheduler interface {
 }
 
 type parallelRequestSchedulerI struct {
-	mutex sync.Mutex
+	mutex *sync.Mutex
 
 	maxSessionID int
 
@@ -138,15 +131,23 @@ type parallelRequestSchedulerI struct {
 	scriptQueue     []*requestControlBlock // js 文件请求队列
 	otherFileQueue  []*requestControlBlock // 其他文件请求队列
 
-	mayExecuteNextRequest chan struct{}                 // 有任何可能实际执行下一请求时都向此 chan 中发送信号
+	mayExecuteNextRequest *chan struct{}                // 有任何可能实际执行下一请求时都向此 chan 中发送信号
 	subRequestsChan       *chan *[]*requestControlBlock // 如果需要发送子请求，就把子请求的信息发送到这个 chan 中
 }
 
 func newParallelRequestScheduler(hostname string, tlsConfig *tls.Config, quicConfig *quic.Config,
 	requestWriter *requestWriter, decoder *qpack.Decoder, roundTripperOpts *roundTripperOpts) parallelRequestScheduler {
 
-	subRequestsChan := make(chan *[]*requestControlBlock)
+	// DEBUG: 尝试给 10 个缓冲区
+	subRequestsChan := make(chan *[]*requestControlBlock, 10)
+	log.Printf("original subRequestChan address = <%v>", &subRequestsChan)
+	mutex := sync.Mutex{}
+
+	mayExecuteNextRequetChan := make(chan struct{}, 10)
+	log.Printf("original mayExecuteNextRequetChan address = <%v>", &mayExecuteNextRequetChan)
 	return &parallelRequestSchedulerI{
+		mutex: &mutex,
+
 		maxSessionID: 1,
 
 		// 初始化来自原 client 实例定义的变量
@@ -166,7 +167,8 @@ func newParallelRequestScheduler(hostname string, tlsConfig *tls.Config, quicCon
 		scriptQueue:     make([]*requestControlBlock, 0),
 		otherFileQueue:  make([]*requestControlBlock, 0),
 
-		mayExecuteNextRequest: make(chan struct{}),
+		// mayExecuteNextRequest: make(chan struct{}),
+		mayExecuteNextRequest: &mayExecuteNextRequetChan,
 		subRequestsChan:       &subRequestsChan,
 	}
 }
@@ -175,17 +177,21 @@ func newParallelRequestScheduler(hostname string, tlsConfig *tls.Config, quicCon
 func (scheduler *parallelRequestSchedulerI) run() {
 	for {
 		select {
-		case <-scheduler.mayExecuteNextRequest:
+		case <-*scheduler.mayExecuteNextRequest:
 			// 执行主请求
-			nextRequest := scheduler.mayExecute()
-			if nextRequest != nil {
+			nextRequest, err := scheduler.mayExecute()
+			if err == nil {
 				go scheduler.mayDoRequestParallel(nextRequest)
 			}
+			log.Println("case 1 finished")
 		case subRequests := <-*scheduler.subRequestsChan:
+			// FIXME: 会受到长度为 0 的数据，go 环境 panic：index out of range [0] with length 0
+			log.Printf("sub request received: url = <%v>, num = <%v>", (*subRequests)[0].url, len(*subRequests))
 			// 执行子请求
 			for _, subReq := range *subRequests {
 				go scheduler.executeSubRequest(subReq)
 			}
+			log.Println("case 2 finished")
 		}
 	}
 }
@@ -235,72 +241,78 @@ func (scheduler *parallelRequestSchedulerI) getNewQuicSession() (*quic.Session, 
 }
 
 // addNewQuicSession 向调度器添加一条新的 quicSession，并返回对应的控制块
-func (scheduler *parallelRequestSchedulerI) addNewQuicSession() *sessionControlblock {
+func (scheduler *parallelRequestSchedulerI) addNewQuicSession() (*sessionControlblock, error) {
 	newSession, err := scheduler.getNewQuicSession()
 	if err != nil {
-		// 出错
-		fmt.Println(err.Error())
-		return nil
+		// 出错，可能是 404 等错误
+		return nil, errHostNotConnected
 	}
-	newSessionControlBlock := &sessionControlblock{
-		id:            scheduler.maxSessionID,
-		session:       newSession,
-		canDispatched: true, // 初始状态为可调度状态
-	}
-	scheduler.openedSessions = append(scheduler.openedSessions, newSessionControlBlock)
+	newSessionBlock := newSessionControlBlock(scheduler.maxSessionID, newSession, true)
+	scheduler.openedSessions = append(scheduler.openedSessions, newSessionBlock)
 	scheduler.maxSessionID++
-	return newSessionControlBlock
+	return newSessionBlock, nil
 }
 
 // getSession 获取调度器中可用的 quicSession
-func (scheduler *parallelRequestSchedulerI) getSession() *sessionControlblock {
+func (scheduler *parallelRequestSchedulerI) getSession() (*sessionControlblock, error) {
 	// 如果当前没有立刻可用的 session，就创建一个新的并作为结果返回
 	if len(scheduler.openedSessions) <= 0 {
-		// fmt.Println("return initial session")
-		return scheduler.addNewQuicSession()
+		newSessionControlBlock, err := scheduler.addNewQuicSession()
+		if err != nil {
+			return nil, errHostNotConnected
+		}
+		newSessionControlBlock.setBusy()
+		log.Printf("return initial session: id = %v, len = %v", newSessionControlBlock.id, len(scheduler.openedSessions))
+		return newSessionControlBlock, nil
 	}
 
 	// 已经有了现成的 session，那么就把在这些 session 中找一个空闲的
 	for _, block := range scheduler.openedSessions {
-		if block.canDispatched {
+		if block.dispatchable() {
 			// 找到了一个处于空闲状态的 session
-			// fmt.Println("found an idle session", len(scheduler.openedSessions))
-			return block
+			log.Printf("found an idle session: id = %v, len = %v", block.id, len(scheduler.openedSessions))
+			block.setBusy()
+			return block, nil
 		}
 	}
 
 	// 有了现成的 session，但其中没有空闲的。在仍有空位的情况下打开新的 session。
-	if len(scheduler.openedSessions) < 4 {
-		// fmt.Println("no idle session found, create new session")
-		return scheduler.addNewQuicSession()
+	if len(scheduler.openedSessions) < maxSessions {
+		newSessionControlBlock, err := scheduler.addNewQuicSession()
+		if err != nil {
+			return nil, errHostNotConnected
+		}
+		newSessionControlBlock.setBusy()
+		log.Printf("create and return a new session: id = %v, len = %v", newSessionControlBlock.id, len(scheduler.openedSessions))
+		return newSessionControlBlock, nil
 	}
 
 	// 没有空闲的 session，并且不能打开新的 session
-	return nil
+	return nil, errNoAvailableSession
 }
 
 // mayExecute 方法负责在调度器队列中寻找可执行的下一请求
-func (scheduler *parallelRequestSchedulerI) mayExecute() *requestControlBlock {
+func (scheduler *parallelRequestSchedulerI) mayExecute() (*requestControlBlock, error) {
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
 
 	// 获取可用的请求
 	nextRequest, index := scheduler.popRequest()
 	if nextRequest == nil {
-		return nil
+		return nil, errNoAvailableRequest
 	}
 	// 获取可用的 quic 连接
-	availableSession := scheduler.getSession()
-	if availableSession == nil {
-		return nil
+	availableSession, err := scheduler.getSession()
+	if err != nil {
+		return nil, errNoAvailableSession
 	}
 	// 从调度器的待执行队列中删去即将执行的 requestControlBlock
 	scheduler.removeFirst(index)
 	// 把即将要使用的 session 标记为繁忙状态
-	availableSession.canDispatched = false
+	log.Printf("session = <%v> setBusy() to execute <%v>, value = <%v>, remainingDataLen = <%v>", availableSession.id, nextRequest.request.URL.RequestURI(), availableSession.canDispatched, availableSession.getRemainingDataLen())
 	availableSession.pendingRequest++
 	nextRequest.designatedSession = availableSession
-	return nextRequest
+	return nextRequest, nil
 }
 
 // close 方法拆除所辖的全部 quicSession 并关闭此调度器
@@ -362,44 +374,56 @@ func (scheduler *parallelRequestSchedulerI) addNewRequest(block *requestControlB
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
 	if block.request.URL.RequestURI() == "/" {
-		fmt.Println("adding to document queue", block.request.URL.RequestURI())
+		// log.Printf("adding to document queue: %v", block.request.URL.RequestURI())
 		scheduler.documentQueue = append(scheduler.documentQueue, block)
 	}
 	mimeType := mime.TypeByExtension(filepath.Ext(block.request.URL.RequestURI()))
 	// 有确定的 mime type，则需要根据给出的 mime type 决定加入到哪一条队列中`
 	switch getQueueIndexByMimeType(mimeType) {
 	case documentQueueIndex:
-		fmt.Println("adding to document queue", block.request.URL.RequestURI())
+		// log.Printf("adding to document queue: %v", block.request.URL.RequestURI())
 		scheduler.documentQueue = append(scheduler.documentQueue, block)
 	case styleSheetQueueIndex:
-		fmt.Println("adding to stylesheet queue", block.request.URL.RequestURI())
+		// log.Printf("adding to stylesheet queue: %v", block.request.URL.RequestURI())
 		scheduler.styleSheetQueue = append(scheduler.styleSheetQueue, block)
 	case scriptQueueIndex:
-		fmt.Println("adding to script queue", block.request.URL.RequestURI())
+		// log.Printf("adding to script queue: %v", block.request.URL.RequestURI())
 		scheduler.scriptQueue = append(scheduler.scriptQueue, block)
 	default:
-		fmt.Println("adding to other file queue", block.request.URL.RequestURI())
+		// log.Printf("adding to other file queue: %v", block.request.URL.RequestURI())
 		scheduler.otherFileQueue = append(scheduler.otherFileQueue, block)
 	}
 	// 添加后立刻发出信号给调度器主 go 程，由后者负责确定在何时发出该请求
-	scheduler.mayExecuteNextRequest <- struct{}{}
+	*scheduler.mayExecuteNextRequest <- struct{}{}
 }
 
 // addAndWait 方法负责把收到的请求添加到调度器队列中，并在调度器处理完成之后返回响应
 func (scheduler *parallelRequestSchedulerI) addAndWait(req *http.Request) (*http.Response, error) {
 	var requestDone = make(chan struct{}, 0)
-	resBlock := requestControlBlock{
-		isMainSession: true,
-		request:       req,
-		requestDone:   &requestDone,
+	var requestError = make(chan struct{}, 0)
+	reqBlock := requestControlBlock{
+		isMainSession:                true,
+		request:                      req,
+		requestDone:                  &requestDone,
+		requestError:                 &requestError,
+		shoudUseParallelTransmission: true, // 把该字段设为 true 可以让该请求至少进行一次并行传输决策
 	}
-	scheduler.addNewRequest(&resBlock)
+	scheduler.addNewRequest(&reqBlock)
 
 	for {
 		select {
-		case <-*resBlock.requestDone:
-			fmt.Println("request done:", req.URL.Hostname()+req.URL.RequestURI())
-			return resBlock.response, resBlock.unhandledError
+		case <-*reqBlock.requestError:
+			// 请求错误统一按照 404 Not Found 处理
+			errorResponse := http.Response{
+				Proto:      "HTPP/3",
+				ProtoMajor: 3,
+				StatusCode: http.StatusNotFound,
+				Header:     req.Header.Clone(),
+			}
+			return &errorResponse, nil
+		case <-*reqBlock.requestDone:
+			log.Printf("request done: %v", req.URL.Hostname()+req.URL.RequestURI())
+			return reqBlock.response, reqBlock.unhandledError
 		}
 	}
 }
@@ -444,6 +468,10 @@ func (scheduler *parallelRequestSchedulerI) shoudUseParallelTransmission(
 		return -1, nil
 	}
 
+	// FIXME: 存在 start 小于 end 的问题
+	// FIXME: 上层下发的 remainingDataLen 没有及时更新
+	log.Printf("shoudUseParallelTransmission: url = <%v>, blocksToSplitted = <%v>", url, blocksToSplitted)
+
 	// 如果只用主请求传输数据，则所需时间为
 	remainingTimeMainSession := float64(blocksToSplitted) * float64(blockSize) / mainSessionBandwidth
 	subReqeuestSessions := make([]*pseudoRequestControlBlock, 0)
@@ -456,7 +484,8 @@ func (scheduler *parallelRequestSchedulerI) shoudUseParallelTransmission(
 			continue
 		}
 		// 添加伪请求控制块，避免修改原控制块
-		timeToFinish := getTimeToFinish(block.remainingDataLen, block.bandwdith, block.rtt, blocksToSplitted*blockSize)
+		timeToFinish := getTimeToFinish(block.getRemainingDataLen(), block.getBandwidth(), block.rtt, blocksToSplitted*blockSize)
+		log.Printf("shoudUseParallelTransmission: session = <%v>, timeToFinish = <%v>, remainingDataLen = <%v>, bandwidth = <%v>", block.id, timeToFinish, block.getRemainingDataLen(), block.getBandwidth())
 		subReqeuestSessions = append(subReqeuestSessions, newPseudoRequestControlBlock(block, timeToFinish))
 		timeSum += timeToFinish
 	}
@@ -489,6 +518,11 @@ func (scheduler *parallelRequestSchedulerI) shoudUseParallelTransmission(
 	// 子请求开始的字节位置
 	startOffset := receivedBytesCount + mainSessionAdjustedEndOffset
 
+	log.Printf("shoudUseParallelTransmission: url = <%v>, mainSessionBlocks = <%v>", url, mainSessionBlocks)
+	log.Printf("shoudUseParallelTransmission: url = <%v>, mainSessionAdjustedEndOffset = <%v>", url, mainSessionAdjustedEndOffset)
+	log.Printf("shoudUseParallelTransmission: url = <%v>, remainingDataSubReqs = <%v>", url, remainingDataSubReqs)
+	log.Printf("shoudUseParallelTransmission: url = <%v>, startOffset = <%v>", url, startOffset)
+
 	// 计算各子请求应当传输的数据块
 	// TODO: 把数据的分布改成 raid 0 一样的条状分布
 	for _, block := range subReqeuestSessions {
@@ -510,32 +544,35 @@ func (scheduler *parallelRequestSchedulerI) shoudUseParallelTransmission(
 		}
 		// 最多添加 4 个子请求
 		subRequests = append(subRequests, subReq)
+
+		log.Printf("shoudUseParallelTransmission: start = <%v>, end = <%v>", subReq.bytesStartOffset, subReq.bytesEndOffset)
+
 		remainingDataSubReqs -= (subReq.bytesEndOffset - subReq.bytesStartOffset)
 		startOffset += numBlocks * blockSize
 	}
 	if len(subRequests)-1 > 0 {
 		// 把最后一个子请求的终止字节数调整为全部字节
 		subRequests[len(subRequests)-1].bytesEndOffset = receivedBytesCount + remainingDataLen - 1
+		log.Printf("shoudUseParallelTransmission: adjusted end = <%v>", subRequests[len(subRequests)-1].bytesEndOffset)
 	}
 
 	return mainSessionAdjustedEndOffset, &subRequests
 }
 
 // mayDoRequestParallel 方法负责实际发出请求并返回响应，视情况决定是否采用并行传输以降低下载时间
-func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
-	reqBlock *requestControlBlock) {
+func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(reqBlock *requestControlBlock) {
 	req := reqBlock.request
 	mainSession := *reqBlock.designatedSession.session
 	// 打开 quic stream，开始处理该 H3 请求
 	str, err := mainSession.OpenStreamSync(context.Background())
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Printf(err.Error())
 		return
 	}
 
 	rsp, err := scheduler.getResponse(req, &str, &mainSession)
 	if err != nil {
-		fmt.Println("mayDoRequestParallel", err.Error())
+		log.Printf("mayDoRequestParallel %v", err.Error())
 		return
 	}
 
@@ -544,12 +581,15 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
 	// 读取响应体总长度，确定需要复制的总数据量，在主 go 程处值为 [0-EOF]
 	remainingDataLen, err := strconv.Atoi(rsp.Header.Get("Content-Length"))
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Printf(err.Error())
 		return
 	}
+	log.Printf("content-len = <%v>, url = <%v>", remainingDataLen, req.URL.RequestURI())
 
 	// 加上本次请求需要传输的数据量
-	reqBlock.designatedSession.remainingDataLen += remainingDataLen
+	// reqBlock.designatedSession.remainingDataLen += remainingDataLen
+	reqBlock.designatedSession.addRemainingDataLen(remainingDataLen)
+	log.Printf("data len for new request added: url = <%v>, dataLen = <%v>, newValue = <%v>", req.URL.RequestURI(), remainingDataLen, reqBlock.designatedSession.getRemainingDataLen())
 
 	// 循环读取响应体中的全部数据
 	subRequestDone := make(chan *subRequestControlBlock)
@@ -558,55 +598,74 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
 		// TODO: 实现提前一个 RTT 发起请求的功能
 		if remainingDataLen <= defaultBlockSize {
 			// 还有一块的传输任务，可以通知调度器下发下一个请求了
-			scheduler.mayExecuteNextRequest <- struct{}{}
+			log.Printf("before send to: mayExecuteNextRequest: chan len = <%v>, address = <%p>", len(*scheduler.mayExecuteNextRequest), scheduler.mayExecuteNextRequest)
+			*scheduler.mayExecuteNextRequest <- struct{}{}
+			log.Printf("after send to: mayExecuteNextRequest: chan len = <%v>", len(*scheduler.mayExecuteNextRequest))
 		}
 		// 把数据写入到 mainBuffer 中
+		log.Printf("session = <%v>, url = <%v>, beforeRead", reqBlock.designatedSession.id, reqBlock.request.URL.RequestURI())
 		written, bandwidth, err := readData(remainingDataLen, &mainBuffer, rsp)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Printf(err.Error())
 			return
 		}
+		log.Printf("session = <%v>, url = <%v>, readDataLen = <%v>", reqBlock.designatedSession.id, reqBlock.request.URL.RequestURI(), written)
 
 		// 调整本请求和所用 session 上需要传输的数据量
 		remainingDataLen -= written
-		reqBlock.designatedSession.remainingDataLen -= written
-		reqBlock.designatedSession.bandwdith = bandwidth
+		// reqBlock.designatedSession.remainingDataLen -= written
+		reqBlock.designatedSession.reduceRemainingDataLen(written)
+		// reqBlock.designatedSession.bandwdith = bandwidth
+		reqBlock.designatedSession.setBandwidth(bandwidth)
+		log.Printf("set bandwidth: session = <%v>, bandwidth = <%v>, remainingDataLen = <%v>", reqBlock.designatedSession.id, bandwidth, remainingDataLen)
 		if remainingDataLen <= 0 {
 			// early stop 功能，避免小于块大小的文件进入子请求决策模块
+			log.Printf("early stop: url = <%v>", reqBlock.request.URL.RequestURI())
 			break
 		}
 
 		/* 子请求决策模块 */
-		if !reqBlock.subRequestDispatched {
+		if reqBlock.shoudUseParallelTransmission {
 			// 尚未下发子请求时才会进入这段代码，以确定是否需要使用并行传输
+			log.Printf("before decision, url = <%v>", req.URL.RequestURI())
 			mainSessionAdjuestedEndOffset, subReqs :=
 				scheduler.shoudUseParallelTransmission(
 					mainRequestURL, mainBuffer.Len(), remainingDataLen, bandwidth,
 					mainSession.GetConnectionRTT(), defaultBlockSize, &subRequestDone,
 					reqBlock.designatedSession.id)
 			if subReqs == nil {
+				log.Printf("no parallel is required for url = <%v>", req.URL.RequestURI())
 				// 无需进行并行传输
+				reqBlock.shoudUseParallelTransmission = false
+				log.Printf("shoudlUseParallelTransmission set to false: url = <%v>, remainingDataLen = <%v>", req.URL.RequestURI(), remainingDataLen)
 				continue
 			}
+			log.Printf("use <%v> sub request to transfer main request = <%v>", len(*subReqs), reqBlock.request.URL.RequestURI())
 			// 把主请求标记为子请求已发送状态
 			reqBlock.subRequestDispatched = true
 			remainingDataLen = mainSessionAdjuestedEndOffset
+			// 设为 false 以免下次进入子请求决策模块
+			reqBlock.shoudUseParallelTransmission = false
 			// 把需要开始的子请求发送到调度器
+			log.Printf("subRequest unsent: url = <%v>, len = <%v>", req.URL.RequestURI(), len(*subReqs))
+			log.Printf("wrapped subRequestsChan address = <%v>, chan len = <%v>", scheduler.subRequestsChan, len(*scheduler.subRequestsChan))
 			*scheduler.subRequestsChan <- subReqs
+			log.Printf("subRequest sent: url = <%v>, len = <%v>", req.URL.RequestURI(), len(*subReqs))
 		}
 	}
+	log.Printf("session = <%v> idle, url = <%v>, readDataLen = <%v>", reqBlock.designatedSession.id, reqBlock.request.URL.RequestURI(), mainBuffer.Len())
 	// 读取完指定数据段之后立刻关闭这条 stream
 	rsp.Body.Close()
 	// 立刻把承载该请求的 session 改为可调度状态
 	// TODO: 目前的实现为读取完数据之后再声明为可用，实际上要求在读取完成前一个 RTT 时即声明可用以避免网络空闲
-	reqBlock.designatedSession.canDispatched = true
+	reqBlock.designatedSession.setIdle()
 
 	// 把主请求读取的数据添加到响应体中
 	respBody := newSegmentedResponseBody()
 	data := mainBuffer.Bytes()
 	respBody.addData(&data, 0)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Printf(err.Error())
 		return
 	}
 
@@ -614,7 +673,7 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(
 	if reqBlock.subRequestDispatched {
 		bytesTransferredBySubRequests, err := strconv.Atoi(rsp.Header.Get("Content-Length"))
 		if err != nil {
-			fmt.Println("ator error:", err.Error())
+			log.Printf("ator error: %v", err.Error())
 			return
 		}
 		bytesTransferredBySubRequests -= (mainBuffer.Len() + 1)
@@ -662,9 +721,12 @@ func readData(remainingDataLen int, buf *bytes.Buffer, rsp *http.Response) (int,
 			return int(written), 0, nil
 		}
 	}
-	timeConsumed := timeEnd.Sub(timeStart).Milliseconds()
+	// timeConsumed := timeEnd.Sub(timeStart).Milliseconds()
+	timeConsumed := timeEnd.Sub(timeStart).Microseconds()
 	// 带宽的单位为 Bps，所以需要通过乘 1000 来抵消掉用毫秒作为计时单位的 1000 倍缩小
-	bandwidth := float64(written) / float64(timeConsumed) * 1000.0
+	// 带宽的单位为 Bps，所以需要通过乘 1000000 来抵消掉用微秒作为计时单位的 1000000 倍缩小
+	bandwidth := float64(written) / float64(timeConsumed) * 1000000.0
+	log.Printf("readData: written = <%v>, time = <%v>", written, timeConsumed)
 	return int(written), bandwidth, nil
 }
 
@@ -757,57 +819,74 @@ func (scheduler *parallelRequestSchedulerI) execute(
 func (scheduler *parallelRequestSchedulerI) executeSubRequest(reqBlock *requestControlBlock) {
 	subRequest, err := http.NewRequest(http.MethodGet, reqBlock.url, nil)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Printf(err.Error())
 	}
 
 	subRequest.Header.Add(
 		"Range", fmt.Sprintf("bytes=%d-%d", reqBlock.bytesStartOffset, reqBlock.bytesEndOffset))
 
 	if reqBlock.designatedSession == nil {
+		scheduler.mutex.Lock()
 		// 调度器没有为该请求分配 session，需要在执行的时候现开一条新的 session
-		reqBlock.designatedSession = scheduler.getSession()
+		reqBlock.designatedSession, err = scheduler.getSession()
+		scheduler.mutex.Unlock()
+		if err != nil {
+			log.Printf("error: %v", err.Error())
+			*reqBlock.requestError <- struct{}{}
+			return
+		}
 	}
 	session := *reqBlock.designatedSession.session
+	log.Printf("executing sub request <%v>, start = <%v>, end = <%v>, session = <%v>", reqBlock.url, reqBlock.bytesStartOffset, reqBlock.bytesEndOffset, reqBlock.designatedSession.id)
 
 	// 打开 quic stream，开始处理该 H3 请求
 	str, err := session.OpenStreamSync(context.Background())
 	if err != nil {
-		fmt.Println("executeSubRequest", err.Error())
+		log.Printf("executeSubRequest: %v", err.Error())
 		return
 	}
 	resp, err := scheduler.getResponse(subRequest, &str, &session)
 	if err != nil {
-		fmt.Println("executeSubRequest", err.Error())
+		log.Printf("executeSubRequest: %v", err.Error())
 		return
 	}
 	// data, err := ioutil.ReadAll(resp.Body)
 	dataBuffer := bytes.Buffer{}
 	remainingDataLen, err := strconv.Atoi(resp.Header.Get("Content-Length"))
 	if err != nil {
-		fmt.Println("subReq error", err.Error())
+		log.Printf("subReq error: %v", err.Error())
 	}
+	reqBlock.designatedSession.addRemainingDataLen(remainingDataLen)
+
+	log.Printf("data len for new request added: url = <%v>, dataLen = <%v>, newValue = <%v>", reqBlock.url, remainingDataLen, reqBlock.designatedSession.getRemainingDataLen())
 	for remainingDataLen > 0 {
 		// TODO: 实现提前一个 RTT 发起请求的功能
 		if remainingDataLen <= defaultBlockSize {
 			// 发送信号给调度器以触发下一请求
-			scheduler.mayExecuteNextRequest <- struct{}{}
+			*scheduler.mayExecuteNextRequest <- struct{}{}
 		}
 		// 把数据写入到 mainBuffer 中
+		log.Printf("session = <%v>, url = <%v>, beforeRead", reqBlock.designatedSession.id, reqBlock.url)
 		written, bandwidth, err := readData(remainingDataLen, &dataBuffer, resp)
 		if err != nil {
-			fmt.Println(err.Error())
-			// fmt.Println("fuck")
+			log.Printf(err.Error())
 			return
 		}
+		log.Printf("session = <%v>, url = <%v>, readDataLen = <%v>", reqBlock.designatedSession.id, reqBlock.url, written)
 
 		// 调整本请求和所用 session 上需要传输的数据量
 		remainingDataLen -= written
-		reqBlock.designatedSession.remainingDataLen -= written
+		// reqBlock.designatedSession.remainingDataLen -= written
+		reqBlock.designatedSession.reduceRemainingDataLen(written)
 		// 更新读取本分段的平均带宽
-		reqBlock.designatedSession.bandwdith = bandwidth
+		// reqBlock.designatedSession.bandwdith = bandwidth
+		reqBlock.designatedSession.setBandwidth(bandwidth)
+		log.Printf("set bandwidth: session = <%v>, bandwidth = <%v>, remainingDataLen = <%v>", reqBlock.designatedSession.id, bandwidth, remainingDataLen)
 	}
 	// 把该 session 标记为可用状态
-	reqBlock.designatedSession.canDispatched = true
+	// reqBlock.designatedSession.canDispatched = true
+	log.Printf("subReq = <%v>, session = <%v> idle, readDataLen = <%v>, start = <%v>, end = <%v>", reqBlock.url, reqBlock.designatedSession.id, dataBuffer.Len(), reqBlock.bytesStartOffset, reqBlock.bytesEndOffset)
+	reqBlock.designatedSession.setIdle()
 	resp.Body.Close()
 
 	controlBlock := &subRequestControlBlock{
