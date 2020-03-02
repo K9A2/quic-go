@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"log"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
@@ -37,7 +36,7 @@ func (block *sessionControlblock) setBusy() {
 	defer block.mutex.Unlock()
 	// session 繁忙时不可被调度
 	block.canDispatched = false
-	log.Printf("setBusy: session = <%v>, candispatched = <%v>", block.id, block.canDispatched)
+	// log.Printf("setBusy: session = <%v>, candispatched = <%v>", block.id, block.canDispatched)
 }
 
 func (block *sessionControlblock) setIdle() {
@@ -45,7 +44,7 @@ func (block *sessionControlblock) setIdle() {
 	defer block.mutex.Unlock()
 	// session 空闲时可被调度
 	block.canDispatched = true
-	log.Printf("setIdle: session = <%v>, candispatched = <%v>", block.id, block.canDispatched)
+	// log.Printf("setIdle: session = <%v>, candispatched = <%v>", block.id, block.canDispatched)
 }
 
 func (block *sessionControlblock) dispatchable() bool {
