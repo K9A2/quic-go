@@ -48,7 +48,7 @@ type clientI struct {
 
 	logger utils.Logger
 
-	scheduler parallelRequestScheduler // 调度器实例
+	scheduler requestScheduler // 调度器实例
 }
 
 func newClient(
@@ -77,9 +77,19 @@ func newClient(
 		logger:   logger,
 	}
 
+	info := &clientInfo{
+		hostname:         authorityAddr("https", hostname),
+		tlsConfig:        tlsConf,
+		quicConfig:       quicConfig,
+		requestWriter:    newRequestWriter(logger),
+		decoder:          qpack.NewDecoder(func(hf qpack.HeaderField) {}),
+		roundTripperOpts: opts,
+	}
+
 	// 初始化调度器实例
-	newClient.scheduler = newParallelRequestScheduler(authorityAddr("https", hostname), tlsConf, quicConfig,
-		newRequestWriter(logger), qpack.NewDecoder(func(hf qpack.HeaderField) {}), opts)
+	// newClient.scheduler = newParallelRequestScheduler(authorityAddr("https", hostname), tlsConf, quicConfig,
+	// 	newRequestWriter(logger), qpack.NewDecoder(func(hf qpack.HeaderField) {}), opts)
+	newClient.scheduler = newRequestScheduler(parallelRequestSchedulerName, info)
 	// 在别的 go 程中运行调度器实例
 	go newClient.scheduler.run()
 

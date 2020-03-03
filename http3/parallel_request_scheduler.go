@@ -13,102 +13,13 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/marten-seemann/qpack"
 )
 
-// 每个 client 下最多只能开 4 个 quic 连接，相当于最多同时使用 4 条连接处理同一个请求
-const maxSessions = 4
-
-// 默认块大小
-const defaultBlockSize = 32 * 1024
-
-// 队列名称
-const documentQueueIndex = 1
-const styleSheetQueueIndex = 2
-const scriptQueueIndex = 3
-const otherQueueIndex = 4
-
-// 各队列对应的文件的 mime 类型关键字
-const documentQueueFileType = "html"
-const styleSheetQueueFileType = "css"
-const scriptQueueFileType = "javascript"
-
-// 错误定义
-var errHostNotConnected = errors.New("can not connect to given host")    // 连不上对端主机
-var errNoAvailableSession = errors.New("no available session")           // 找不到指定的
-var errCanNotExecuteRequest = errors.New("can not execute this request") // 无法执行此请求
-var errNoAvailableRequest = errors.New("no available request")           // 队列中没有待处理的下一请求
-
-// getQueueIndexByMimeType 根据给出的 mimeType 返回这个资源应当加入的队列序号
-func getQueueIndexByMimeType(mimeType string) int {
-	if strings.Contains(mimeType, documentQueueFileType) {
-		return documentQueueIndex
-	} else if strings.Contains(mimeType, styleSheetQueueFileType) {
-		return styleSheetQueueIndex
-	} else if strings.Contains(mimeType, scriptQueueFileType) {
-		return scriptQueueIndex
-	}
-	return otherQueueIndex
-}
-
-// pseudoRequestControlBlock 用来在正式创建请求之前确定该请求应当负责的数据范围
-type pseudoRequestControlBlock struct {
-	// 使用此 session 加载主请求所有剩余数据所需要的时间
-	timeToFinish float64
-	numBlocks    int // 应当由子请求负责传输的数据块数目
-
-	sessionBlock *sessionControlblock
-	share        float64 // 应当负担的数据量占总数据量的比例
-}
-
-func newPseudoRequestControlBlock(
-	sessionBlock *sessionControlblock,
-	timeToFinish float64,
-) *pseudoRequestControlBlock {
-	return &pseudoRequestControlBlock{
-		timeToFinish: timeToFinish, sessionBlock: sessionBlock,
-	}
-}
-
-type requestControlBlock struct {
-	isMainSession                bool // 是否为主请求
-	bytesStartOffset             int  // 响应体开始位置，用于让主请求拼装为完成的请求
-	bytesEndOffset               int  // 响应体结束位置，同上
-	shoudUseParallelTransmission bool // 是否需要使用并行传输
-	subRequestDispatched         bool // 是否已经下发子请求
-
-	url            string                        // 请求的 url，只在子请求是使用
-	request        *http.Request                 // 对应的 http 请求
-	requestDone    *chan struct{}                // 调度器完成该 http 请求时向该 chan 发送消息
-	subRequestDone *chan *subRequestControlBlock // 子请求完成时向该 chan 发送消息
-	requestError   *chan struct{}                // 出现任何错误时向该 chan 发送信息
-
-	response       *http.Response // 已经处理完成的 response，可以返回上层应用
-	contentLength  int            // 响应体字节数
-	unhandledError error          // 处理 response 过程中发生的错误
-
-	designatedSession *sessionControlblock // 调度器指定用来承载该请求的 session
-}
-
-type subRequestControlBlock struct {
-	data          []byte // 子请求所获取的数据
-	contentLength int    // 子请求所获得的数据的字节数
-	startOffset   int    // 子请求所获得的数据相对于主请求的开始字节数
-	endOffset     int    // 子请求所获得的数据相对于主请求的终止字节数
-}
-
-type parallelRequestScheduler interface {
-	addAndWait(*http.Request) (*http.Response, error)
-	close() error
-	run()
-}
-
-type parallelRequestSchedulerI struct {
+type parallelRequestScheduler struct {
 	mutex *sync.Mutex
 
 	maxSessionID int
@@ -135,31 +46,30 @@ type parallelRequestSchedulerI struct {
 	subRequestsChan       *chan *[]*requestControlBlock // 如果需要发送子请求，就把子请求的信息发送到这个 chan 中
 }
 
-func newParallelRequestScheduler(hostname string, tlsConfig *tls.Config, quicConfig *quic.Config,
-	requestWriter *requestWriter, decoder *qpack.Decoder, roundTripperOpts *roundTripperOpts) parallelRequestScheduler {
+// newParallelRequestScheduler 初始化并返回新生成的调度器 parallelRequestScheduler 实例
+func newParallelRequestScheduler(info *clientInfo) requestScheduler {
 
-	// DEBUG: 尝试给 10 个缓冲区
 	subRequestsChan := make(chan *[]*requestControlBlock, 10)
 	// log.Printf("original subRequestChan address = <%v>", &subRequestsChan)
 	mutex := sync.Mutex{}
 
 	mayExecuteNextRequetChan := make(chan struct{}, 10)
 	// log.Printf("original mayExecuteNextRequetChan address = <%v>", &mayExecuteNextRequetChan)
-	return &parallelRequestSchedulerI{
+	return &parallelRequestScheduler{
 		mutex: &mutex,
 
 		maxSessionID: 1,
 
 		// 初始化来自原 client 实例定义的变量
-		hostname:         hostname,
-		tlsConfig:        tlsConfig,
-		quicConfig:       quicConfig,
-		requestWriter:    requestWriter,
-		decoder:          decoder,
-		roundTripperOpts: roundTripperOpts,
+		hostname:         info.hostname,
+		tlsConfig:        info.tlsConfig,
+		quicConfig:       info.quicConfig,
+		requestWriter:    info.requestWriter,
+		decoder:          info.decoder,
+		roundTripperOpts: info.roundTripperOpts,
 
 		// 同一 domain 下最多只能打开 4 条 quic 连接
-		openedSessions: make([]*sessionControlblock, 0, maxSessions),
+		openedSessions: make([]*sessionControlblock, 0, maxConcurrentSessions),
 		idleSession:    0,
 
 		documentQueue:   make([]*requestControlBlock, 0),
@@ -174,7 +84,7 @@ func newParallelRequestScheduler(hostname string, tlsConfig *tls.Config, quicCon
 }
 
 // 调度器的主 go 程
-func (scheduler *parallelRequestSchedulerI) run() {
+func (scheduler *parallelRequestScheduler) run() {
 	for {
 		select {
 		case <-*scheduler.mayExecuteNextRequest:
@@ -197,7 +107,7 @@ func (scheduler *parallelRequestSchedulerI) run() {
 }
 
 // popRequest 检查调度器队列中是否有需要处理的请求，并给出该就绪的请求和所在队列序号
-func (scheduler *parallelRequestSchedulerI) popRequest() (*requestControlBlock, int) {
+func (scheduler *parallelRequestScheduler) popRequest() (*requestControlBlock, int) {
 	var nextRequest *requestControlBlock
 	var queueIndex int
 	if len(scheduler.documentQueue) > 0 {
@@ -217,7 +127,7 @@ func (scheduler *parallelRequestSchedulerI) popRequest() (*requestControlBlock, 
 }
 
 // removeFirst 移除指定队列的第一个元素
-func (scheduler *parallelRequestSchedulerI) removeFirst(index int) {
+func (scheduler *parallelRequestScheduler) removeFirst(index int) {
 	switch index {
 	case documentQueueIndex:
 		scheduler.documentQueue = scheduler.documentQueue[1:]
@@ -231,9 +141,9 @@ func (scheduler *parallelRequestSchedulerI) removeFirst(index int) {
 }
 
 // getNewQuicSession 方法创建并返回一条新的 quicSession
-func (scheduler *parallelRequestSchedulerI) getNewQuicSession() (*quic.Session, error) {
+func (scheduler *parallelRequestScheduler) getNewQuicSession() (*quic.Session, error) {
 	// 建立一个新的 quicSession
-	newSession, err := scheduler.dial()
+	newSession, err := dial(scheduler.hostname, scheduler.tlsConfig, scheduler.quicConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +151,7 @@ func (scheduler *parallelRequestSchedulerI) getNewQuicSession() (*quic.Session, 
 }
 
 // addNewQuicSession 向调度器添加一条新的 quicSession，并返回对应的控制块
-func (scheduler *parallelRequestSchedulerI) addNewQuicSession() (*sessionControlblock, error) {
+func (scheduler *parallelRequestScheduler) addNewQuicSession() (*sessionControlblock, error) {
 	newSession, err := scheduler.getNewQuicSession()
 	if err != nil {
 		// 出错，可能是 404 等错误
@@ -254,7 +164,7 @@ func (scheduler *parallelRequestSchedulerI) addNewQuicSession() (*sessionControl
 }
 
 // getSession 获取调度器中可用的 quicSession
-func (scheduler *parallelRequestSchedulerI) getSession() (*sessionControlblock, error) {
+func (scheduler *parallelRequestScheduler) getSession() (*sessionControlblock, error) {
 	// 如果当前没有立刻可用的 session，就创建一个新的并作为结果返回
 	if len(scheduler.openedSessions) <= 0 {
 		newSessionControlBlock, err := scheduler.addNewQuicSession()
@@ -277,7 +187,7 @@ func (scheduler *parallelRequestSchedulerI) getSession() (*sessionControlblock, 
 	}
 
 	// 有了现成的 session，但其中没有空闲的。在仍有空位的情况下打开新的 session。
-	if len(scheduler.openedSessions) < maxSessions {
+	if len(scheduler.openedSessions) < maxConcurrentSessions {
 		newSessionControlBlock, err := scheduler.addNewQuicSession()
 		if err != nil {
 			return nil, errHostNotConnected
@@ -292,7 +202,7 @@ func (scheduler *parallelRequestSchedulerI) getSession() (*sessionControlblock, 
 }
 
 // mayExecute 方法负责在调度器队列中寻找可执行的下一请求
-func (scheduler *parallelRequestSchedulerI) mayExecute() (*requestControlBlock, error) {
+func (scheduler *parallelRequestScheduler) mayExecute() (*requestControlBlock, error) {
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
 
@@ -316,7 +226,7 @@ func (scheduler *parallelRequestSchedulerI) mayExecute() (*requestControlBlock, 
 }
 
 // close 方法拆除所辖的全部 quicSession 并关闭此调度器
-func (scheduler *parallelRequestSchedulerI) close() error {
+func (scheduler *parallelRequestScheduler) close() error {
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
 	var err error
@@ -331,46 +241,7 @@ func (scheduler *parallelRequestSchedulerI) close() error {
 	return nil
 }
 
-// setupH3Session 方法在传输的 quicSession 上初始化 H3 连接
-func setupH3Session(quicSession *quic.Session) error {
-	// 建立单向控制 stream
-	controlStream, err := (*quicSession).OpenUniStream()
-	if err != nil {
-		return err
-	}
-	buf := &bytes.Buffer{}
-	// write the type byte
-	buf.Write([]byte{0x0})
-	// send the SETTINGS frame
-	(&settingsFrame{}).Write(buf)
-	if _, err := controlStream.Write(buf.Bytes()); err != nil {
-		return err
-	}
-	return nil
-}
-
-// dial 方法负责和目标服务器打开一条新的连接
-func (scheduler *parallelRequestSchedulerI) dial() (*quic.Session, error) {
-	var err error
-	var quicSession quic.Session
-	quicSession, err = dialAddr(scheduler.hostname, scheduler.tlsConfig, scheduler.quicConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		// 在另外一个 go 程中打开控制 stream
-		if err := setupH3Session(&quicSession); err != nil {
-			fmt.Printf("Setting up session failed: %s\n", err)
-			quicSession.CloseWithError(quic.ErrorCode(errorInternalError), "")
-		}
-	}()
-
-	// 返回创建的新 quicSession
-	return &quicSession, nil
-}
-
-func (scheduler *parallelRequestSchedulerI) addNewRequest(block *requestControlBlock) {
+func (scheduler *parallelRequestScheduler) addNewRequest(block *requestControlBlock) {
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
 	if block.request.URL.RequestURI() == "/" {
@@ -398,7 +269,7 @@ func (scheduler *parallelRequestSchedulerI) addNewRequest(block *requestControlB
 }
 
 // addAndWait 方法负责把收到的请求添加到调度器队列中，并在调度器处理完成之后返回响应
-func (scheduler *parallelRequestSchedulerI) addAndWait(req *http.Request) (*http.Response, error) {
+func (scheduler *parallelRequestScheduler) addAndWait(req *http.Request) (*http.Response, error) {
 	var requestDone = make(chan struct{}, 0)
 	var requestError = make(chan struct{}, 0)
 	reqBlock := requestControlBlock{
@@ -414,13 +285,7 @@ func (scheduler *parallelRequestSchedulerI) addAndWait(req *http.Request) (*http
 		select {
 		case <-*reqBlock.requestError:
 			// 请求错误统一按照 404 Not Found 处理
-			errorResponse := http.Response{
-				Proto:      "HTPP/3",
-				ProtoMajor: 3,
-				StatusCode: http.StatusNotFound,
-				Header:     req.Header.Clone(),
-			}
-			return &errorResponse, nil
+			return getErrorResponse(req), nil
 		case <-*reqBlock.requestDone:
 			// log.Printf("request done: %v", req.URL.Hostname()+req.URL.RequestURI())
 			return reqBlock.response, reqBlock.unhandledError
@@ -428,21 +293,11 @@ func (scheduler *parallelRequestSchedulerI) addAndWait(req *http.Request) (*http
 	}
 }
 
-// getTimeToFinish 函数计算在当前情况下，包含请求就绪在内的传输完所有数据需要的时间
-func getTimeToFinish(remainingDataLen int, bandwidth float64, rtt float64, newDataLen int) float64 {
-	timeToAvailable := float64(remainingDataLen) / bandwidth
-	if timeToAvailable < rtt {
-		timeToAvailable = rtt
-	}
-	timeToFinishLoadNewData := float64(newDataLen) / bandwidth
-	return timeToAvailable + timeToFinishLoadNewData
-}
-
 // shoudUseParallelTransmission 负责根据调度器实际运行情况决定是否需要多开连接以
 // 降低总传输时间。若需要打开多个子连接以并行传输时，返回值的第一项是主连接仍需要
 // 接收的字节数，主连接在接受完指定的分段之后就可以断掉连接了。返回值的第二项是需要
 // 新开的个子请求信息。
-func (scheduler *parallelRequestSchedulerI) shoudUseParallelTransmission(
+func (scheduler *parallelRequestScheduler) shoudUseParallelTransmission(
 	url string, // 主请求的 url
 	receivedBytesCount int, // 主请求已经接受的字节数
 	remainingDataLen int, // 主请求仍需要接受的字节数
@@ -491,7 +346,7 @@ func (scheduler *parallelRequestSchedulerI) shoudUseParallelTransmission(
 	}
 	// 假设该请求仍需传输的数据需要全部 4 条 session 进行传输
 	// 之后，我们将会把没有用上的伪控制块删掉
-	for len(subReqeuestSessions) < maxSessions-1 {
+	for len(subReqeuestSessions) < maxConcurrentSessions-1 {
 		// 添加假设即将打开的新 sessin 的控制块。由于我们并不知道即将创建的新
 		// session 的信道参数是什么，我们用 mainSession 的数据做为估计值。
 		timeToFinish := getTimeToFinish(0, mainSessionBandwidth, mainSessionRTT*0.001, blocksToSplitted*blockSize)
@@ -564,7 +419,7 @@ func (scheduler *parallelRequestSchedulerI) shoudUseParallelTransmission(
 }
 
 // mayDoRequestParallel 方法负责实际发出请求并返回响应，视情况决定是否采用并行传输以降低下载时间
-func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(reqBlock *requestControlBlock) {
+func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *requestControlBlock) {
 	req := reqBlock.request
 	mainSession := *reqBlock.designatedSession.session
 	// 打开 quic stream，开始处理该 H3 请求
@@ -705,48 +560,21 @@ func (scheduler *parallelRequestSchedulerI) mayDoRequestParallel(reqBlock *reque
 	return
 }
 
-// readData 方法负责读取数据，并返回读取的字节数和带宽
-func readData(remainingDataLen int, buf *bytes.Buffer, rsp *http.Response) (int, float64, error) {
-	var dataLenToCopy int
-	// 确定本次需要从响应体复制出多少个字节的数据
-	if remainingDataLen >= defaultBlockSize {
-		// 响应体比默认块大小更大
-		dataLenToCopy = defaultBlockSize
-	} else {
-		// 响应体比默认块大小更小
-		dataLenToCopy = remainingDataLen
-	}
-
-	timeStart := time.Now()
-	written, err := io.CopyN(buf, rsp.Body, int64(dataLenToCopy))
-	timeEnd := time.Now()
-	if err != nil {
-		if err == io.EOF {
-			return int(written), 0, nil
-		}
-	}
-	// timeConsumed := timeEnd.Sub(timeStart).Milliseconds()
-	timeConsumed := timeEnd.Sub(timeStart).Microseconds()
-	// 带宽的单位为 Bps，所以需要通过乘 1000 来抵消掉用毫秒作为计时单位的 1000 倍缩小
-	// 带宽的单位为 Bps，所以需要通过乘 1000000 来抵消掉用微秒作为计时单位的 1000000 倍缩小
-	bandwidth := float64(written) / float64(timeConsumed) * 1000000.0
-	// log.Printf("readData: written = <%v>, time = <%v>", written, timeConsumed)
-	return int(written), bandwidth, nil
-}
-
 // execute 方法负责在给定的 quicStream 上执行单一的一个请求
-func (scheduler *parallelRequestSchedulerI) execute(
+func (scheduler *parallelRequestScheduler) execute(
 	req *http.Request,
 	str quic.Stream,
 	quicSession quic.Session,
 	reqDone chan struct{},
 ) (*http.Response, requestError) {
-	// 是否使用 gzip 压缩
-	var requestGzip bool
-	if !scheduler.roundTripperOpts.DisableCompression && req.Method != "HEAD" &&
-		req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
-		requestGzip = true
-	}
+	// // 是否使用 gzip 压缩
+	// var requestGzip bool
+	// if !scheduler.roundTripperOpts.DisableCompression && req.Method != "HEAD" &&
+	// 	req.header.get("accept-encoding") == "" && req.Header.Get("Range") == "" {
+	// 	requestGzip = true
+	// }
+	requestGzip := isUsingGzip(scheduler.roundTripperOpts.DisableCompression,
+		req.Method, req.Header.Get("accept-encoding"), req.Header.Get("Range"))
 
 	// 发送请求
 	if err := scheduler.requestWriter.WriteRequest(str, req, requestGzip); err != nil {
@@ -763,8 +591,9 @@ func (scheduler *parallelRequestSchedulerI) execute(
 	if !ok {
 		return nil, newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
 	}
-	if hf.Length > scheduler.maxHeaderBytes() {
-		return nil, newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, scheduler.maxHeaderBytes()))
+	// TODO: 用普通方法代替 maxHeaderBytes
+	if hf.Length > maxHeaderBytes(scheduler.roundTripperOpts.MaxHeaderBytes) {
+		return nil, newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes(scheduler.roundTripperOpts.MaxHeaderBytes)))
 	}
 	// 读取并解析 HEADER 帧
 	headerBlock := make([]byte, hf.Length)
@@ -820,7 +649,7 @@ func (scheduler *parallelRequestSchedulerI) execute(
 }
 
 // executeSubRequest 负责在执行子请求，并在子请求执行完成的时候向指定的 chan 中发送读取到的全部数据
-func (scheduler *parallelRequestSchedulerI) executeSubRequest(reqBlock *requestControlBlock) {
+func (scheduler *parallelRequestScheduler) executeSubRequest(reqBlock *requestControlBlock) {
 	subRequest, err := http.NewRequest(http.MethodGet, reqBlock.url, nil)
 	if err != nil {
 		log.Printf(err.Error())
@@ -905,7 +734,7 @@ func (scheduler *parallelRequestSchedulerI) executeSubRequest(reqBlock *requestC
 }
 
 // 指定的 session 和 stream 上获取执行请求并获取响应体
-func (scheduler *parallelRequestSchedulerI) getResponse(req *http.Request, stream *quic.Stream, session *quic.Session) (*http.Response, error) {
+func (scheduler *parallelRequestScheduler) getResponse(req *http.Request, stream *quic.Stream, session *quic.Session) (*http.Response, error) {
 	str := *stream
 	sess := *session
 	// Request Cancellation:
@@ -937,12 +766,4 @@ func (scheduler *parallelRequestSchedulerI) getResponse(req *http.Request, strea
 		}
 	}
 	return rsp, nil
-}
-
-// maxHeaderBytes 返回该 client 可以接受的最大请求头字节数
-func (scheduler *parallelRequestSchedulerI) maxHeaderBytes() uint64 {
-	if scheduler.roundTripperOpts.MaxHeaderBytes <= 0 {
-		return defaultMaxResponseHeaderBytes
-	}
-	return uint64(scheduler.roundTripperOpts.MaxHeaderBytes)
 }

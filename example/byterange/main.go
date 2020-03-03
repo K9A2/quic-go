@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -12,6 +14,8 @@ import (
 
 // 使用锁机制避免多 go 程出现争用现象
 var createClientLock sync.Mutex
+
+const logFilePath = "output.log"
 
 // 单 go 程下载方法
 // func download(targetURL string, rangeStart int, rangeEnd int, wg *sync.WaitGroup) *[]byte {
@@ -79,6 +83,22 @@ var createClientLock sync.Mutex
 // }
 
 func main() {
+	if _, err := os.Stat(logFilePath); err == nil {
+		// 日志文件已存在，删除此日志文件
+		os.Remove(logFilePath)
+		fmt.Println("old log file removed")
+	}
+
+	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err.Error())
+		return
+	}
+	defer logFile.Close()
+
+	log.SetOutput(logFile)
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
+	log.Println("program started")
 	var result int64
 	repeatFor := 50
 	for i := 0; i < repeatFor; i++ {
@@ -107,6 +127,11 @@ func main() {
 			return
 		}
 
+		log.Printf("res addr = <%p>", &resp)
+		log.Printf("body addr = <%v>", &resp.Body)
+		if resp.Body == nil {
+			log.Println("nil response body")
+		}
 		data, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		// for err == nil {
