@@ -84,3 +84,22 @@ func (block *sessionControlblock) getRemainingDataLen() int {
 	defer block.mutex.Unlock()
 	return block.remainingDataLen
 }
+
+/* 以下方法是对 pendingRequest 字段的操作方法 */
+func (block *sessionControlblock) getPendingRequest() int {
+	block.mutex.Lock()
+	defer block.mutex.Unlock()
+	return block.pendingRequest
+}
+
+func (block *sessionControlblock) addNewRequest() {
+	block.mutex.Lock()
+	defer block.mutex.Unlock()
+	block.pendingRequest++
+}
+
+func (block *sessionControlblock) removeFinishedRequest() {
+	block.mutex.Lock()
+	defer block.mutex.Unlock()
+	block.pendingRequest--
+}

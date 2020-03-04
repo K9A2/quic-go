@@ -102,6 +102,8 @@ func (scheduler *singleConnectionScheduler) addAndWait(req *http.Request) (*http
 		requestError: &requestError,
 	}
 	scheduler.addNewRequest(&reqBlock)
+	log.Printf("addAndWait: queue len = <%v>, req = <%v>",
+		len(scheduler.requestQueue), req.URL.RequestURI())
 
 	for {
 		select {
@@ -122,6 +124,11 @@ func (scheduler *singleConnectionScheduler) popRequest() *requestControlBlock {
 	return nil
 }
 
+// removeFirst 从调度器请求队列中移除第一个请求
+func (scheduler *singleConnectionScheduler) removeFirst() {
+	scheduler.requestQueue = scheduler.requestQueue[1:]
+}
+
 // mayExecute 方法视情况从决定是否调度器中执行下一请求
 func (scheduler *singleConnectionScheduler) mayExecute() {
 	scheduler.mutex.Lock()
@@ -140,6 +147,7 @@ func (scheduler *singleConnectionScheduler) mayExecute() {
 			*nextRequest.requestError <- struct{}{}
 			return
 		}
+		scheduler.removeFirst()
 
 		nextRequest.designatedSession = sessionBlock
 		// 请求和 quicSession 都获取到之后就可以开始处理请求了
@@ -152,18 +160,25 @@ func (scheduler *singleConnectionScheduler) mayExecute() {
 func (scheduler *singleConnectionScheduler) getSession() *sessionControlblock {
 	if len(scheduler.openedSession) > 0 {
 		// 唯一可用的 session 已打开
+		log.Printf("getSession: return the only session")
 		return scheduler.openedSession[0]
 	}
+	log.Printf("getSession: establishing the initial session to <%v>", scheduler.hostname)
 	// 还没有打开唯一的一条 quicSession，需要立刻打开
 	newSession, err := dial(scheduler.hostname, scheduler.tlsConfig, scheduler.quicConfig)
 	if err != nil {
 		return nil
 	}
-	return newSessionControlBlock(scheduler.maxSessionID, newSession, true)
+	newSessionBlock := newSessionControlBlock(scheduler.maxSessionID, newSession, true)
+	scheduler.openedSession = append(scheduler.openedSession, newSessionBlock)
+	return newSessionBlock
 }
 
 // execute 方法实际执行给定的请求
 func (scheduler *singleConnectionScheduler) execute(reqBlock *requestControlBlock) {
+	log.Printf("pending requests = <%v>, session = <%v>, executing request = <%v>",
+		scheduler.pendingRequests, reqBlock.designatedSession.id, reqBlock.request.URL.RequestURI())
+
 	req := reqBlock.request
 	quicSession := *reqBlock.designatedSession.session
 
@@ -207,6 +222,9 @@ func (scheduler *singleConnectionScheduler) execute(reqBlock *requestControlBloc
 	// 向调用者发送信号
 	reqBlock.response = resp
 	*reqBlock.requestDone <- struct{}{}
+	*scheduler.mayExecuteNextRequest <- struct{}{}
+	log.Printf("session = <%v>, request finished, url = <%v>",
+		reqBlock.designatedSession.id, reqBlock.request.URL.RequestURI())
 	scheduler.mutex.Lock()
 	scheduler.pendingRequests--
 	scheduler.mutex.Unlock()

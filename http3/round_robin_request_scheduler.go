@@ -28,6 +28,7 @@ type roundRobinRequestScheduler struct {
 	nextSessionIndex int                    // 当前使用的 quicSession 下标
 
 	mayExecuteNextRequest *chan struct{}
+	newSessionAdded       *chan struct{}
 	requestQueue          []*requestControlBlock
 	pendingRequests       int
 	maxSessionID          int
@@ -36,6 +37,7 @@ type roundRobinRequestScheduler struct {
 // newRoundRobinRequestScheduler 按照给定的信息构造一个新的轮询调度器并返回其指针
 func newRoundRobinRequestScheduler(info *clientInfo) *roundRobinRequestScheduler {
 	mayExecuteNextRequestChan := make(chan struct{}, 10)
+	newSessionAddedChan := make(chan struct{}, 10)
 	return &roundRobinRequestScheduler{
 		hostname:         info.hostname,
 		tlsConfig:        info.tlsConfig,
@@ -46,6 +48,7 @@ func newRoundRobinRequestScheduler(info *clientInfo) *roundRobinRequestScheduler
 
 		openedSession:         make([]*sessionControlblock, 0),
 		mayExecuteNextRequest: &mayExecuteNextRequestChan,
+		newSessionAdded:       &newSessionAddedChan,
 		requestQueue:          make([]*requestControlBlock, 0),
 		maxSessionID:          0,
 	}
@@ -53,6 +56,13 @@ func newRoundRobinRequestScheduler(info *clientInfo) *roundRobinRequestScheduler
 
 // run 运行调度器主线程
 func (scheduler *roundRobinRequestScheduler) run() {
+	go func() {
+		log.Printf("start adding new quic sessions")
+		for i := 0; i < maxConcurrentSessions; i++ {
+			go scheduler.addNewSession()
+		}
+	}()
+
 	for {
 		select {
 		case <-*scheduler.mayExecuteNextRequest:
@@ -84,9 +94,6 @@ func (scheduler *roundRobinRequestScheduler) addNewRequest(reqBlock *requestCont
 
 // addAndWait 把请求添加到调度器内部队列中，由调度器在适当时候执行
 func (scheduler *roundRobinRequestScheduler) addAndWait(req *http.Request) (*http.Response, error) {
-	scheduler.Lock()
-	defer scheduler.Unlock()
-
 	var requestDone = make(chan struct{}, 10)
 	var requestError = make(chan struct{}, 10)
 	reqBlock := requestControlBlock{
@@ -95,6 +102,7 @@ func (scheduler *roundRobinRequestScheduler) addAndWait(req *http.Request) (*htt
 		requestError: &requestError,
 	}
 	scheduler.addNewRequest(&reqBlock)
+	log.Printf("new request added, url = <%v>", req.URL.RequestURI())
 
 	for {
 		select {
@@ -106,28 +114,45 @@ func (scheduler *roundRobinRequestScheduler) addAndWait(req *http.Request) (*htt
 	}
 }
 
-// getSession 方法返回当前可用的 quicSession
-func (scheduler *roundRobinRequestScheduler) getSession() (*sessionControlblock, error) {
-	if len(scheduler.openedSession) < maxSession {
-		// 一直创建新的 session
-		newSession, err := dial(scheduler.hostname, scheduler.tlsConfig, scheduler.quicConfig)
-		if err != nil {
-			log.Printf("error in creating new quic session: %v", err.Error())
-			return nil, err
-		}
-		newSessionBlock := newSessionControlBlock(scheduler.maxSessionID, newSession, true)
-		scheduler.openedSession = append(scheduler.openedSession, newSessionBlock)
-		scheduler.nextSessionIndex = (scheduler.nextSessionIndex + 1) % maxSession
-		log.Printf("using initial quic session: id = <%v>, nextSessionIndex = <%v>", newSessionBlock.id, scheduler.nextSessionIndex)
-		return newSessionBlock, nil
+// addNewSession 向调度器中添加新的 quic session
+func (scheduler *roundRobinRequestScheduler) addNewSession() {
+	newSession, err := dial(scheduler.hostname, scheduler.tlsConfig, scheduler.quicConfig)
+	if err != nil {
+		log.Printf("error in creating new quic session: %v", err.Error())
+		return
 	}
 
+	scheduler.Lock()
+	// 一直创建新的 session
+	newSessionBlock := newSessionControlBlock(scheduler.maxSessionID, newSession, true)
+	scheduler.maxSessionID++
+	scheduler.openedSession = append(scheduler.openedSession, newSessionBlock)
+	scheduler.Unlock()
+	*scheduler.newSessionAdded <- struct{}{}
+	log.Printf("new session added: id = <%v>", newSessionBlock.id)
+}
+
+// getSession 方法返回当前可用的 quicSession
+func (scheduler *roundRobinRequestScheduler) getSession() (*sessionControlblock, error) {
+	if len(scheduler.openedSession) < 1 {
+		// 在队列中没有新的 session 加入时，等待新的 session 就绪
+		select {
+		case <-*scheduler.newSessionAdded:
+		}
+	}
 	// 已经创建了最大数量的 quic session，需要在已有的 quic session 中轮询
-	nextSession := scheduler.openedSession[scheduler.nextSessionIndex]
+	nextSessionBlock := scheduler.openedSession[scheduler.nextSessionIndex]
 	// 轮转到下一 quic session
-	scheduler.nextSessionIndex = (scheduler.nextSessionIndex + 1) % maxSession
-	log.Printf("using existing quic session: id = <%v>, nextSessionIndex = <%v>", nextSession.id, scheduler.nextSessionIndex)
-	return nextSession, nil
+	scheduler.nextSessionIndex = (scheduler.nextSessionIndex + 1) % maxConcurrentSessions
+	if scheduler.nextSessionIndex > len(scheduler.openedSession) {
+		scheduler.nextSessionIndex = 0
+	}
+	return nextSessionBlock, nil
+}
+
+// removeFirst 移除调度器队列中的第一个请求
+func (scheduler *roundRobinRequestScheduler) removeFirst() {
+	scheduler.requestQueue = scheduler.requestQueue[1:]
 }
 
 // mayExecute 视情况决定是否执行下一请求
@@ -145,6 +170,7 @@ func (scheduler *roundRobinRequestScheduler) mayExecute() {
 		return
 	}
 	nextRequest.designatedSession = nextSession
+	scheduler.removeFirst()
 
 	// 在新的 go 程中执行该请求
 	go scheduler.execute(nextRequest)
@@ -152,7 +178,10 @@ func (scheduler *roundRobinRequestScheduler) mayExecute() {
 
 // execute 方法在给定的 session 上执行该请求
 func (scheduler *roundRobinRequestScheduler) execute(reqBlock *requestControlBlock) {
-	log.Printf("session = <%v>, executing request = <%v>", reqBlock.designatedSession.id, reqBlock.request.URL.RequestURI())
+	reqBlock.designatedSession.addNewRequest()
+
+	log.Printf("session = <%v>, executing request = <%v>, sessionPendingRequest = <%v>",
+		reqBlock.designatedSession.id, reqBlock.request.URL.RequestURI(), reqBlock.designatedSession.getPendingRequest())
 
 	req := reqBlock.request
 	quicSession := *reqBlock.designatedSession.session
@@ -193,8 +222,10 @@ func (scheduler *roundRobinRequestScheduler) execute(reqBlock *requestControlBlo
 		}
 	}
 
+	reqBlock.designatedSession.removeFinishedRequest()
 	reqBlock.response = resp
 	*reqBlock.requestDone <- struct{}{}
+	*scheduler.mayExecuteNextRequest <- struct{}{}
 	scheduler.Lock()
 	scheduler.pendingRequests--
 	scheduler.Unlock()

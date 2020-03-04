@@ -61,7 +61,7 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Printf("received request <%v>", requestURL)
+	// log.Printf("received request <%v>", requestURL)
 	if scheme != "http" && scheme != "https" {
 		msg := "unsupported protocal scheme <" + scheme + ">"
 		http.Error(wr, msg, http.StatusBadRequest)
@@ -88,11 +88,11 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	log.Printf("url = %v, statusCode = %v", requestURL, resp.StatusCode)
+	// log.Printf("url = %v, statusCode = %v", requestURL, resp.StatusCode)
 	copyHeader(wr.Header(), resp.Header)
 	wr.WriteHeader(resp.StatusCode)
 	io.Copy(wr, resp.Body)
-	log.Printf("request finished <%v>", requestURL)
+	// log.Printf("request finished <%v>", requestURL)
 }
 
 func main() {
