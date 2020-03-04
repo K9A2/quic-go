@@ -89,7 +89,7 @@ func newClient(
 	// 初始化调度器实例
 	// newClient.scheduler = newParallelRequestScheduler(authorityAddr("https", hostname), tlsConf, quicConfig,
 	// 	newRequestWriter(logger), qpack.NewDecoder(func(hf qpack.HeaderField) {}), opts)
-	newClient.scheduler = newRequestScheduler(parallelRequestSchedulerName, info)
+	newClient.scheduler = newRequestScheduler(roundRobinRequestSchedulerName, info)
 	// 在别的 go 程中运行调度器实例
 	go newClient.scheduler.run()
 

@@ -39,7 +39,7 @@ type singleConnectionScheduler struct {
 // newSingleConnectionScheduler 方法按照 info 中指定的信息
 // 构造一个新的 newSingleConnectionScheduler 实例并返回其指针
 func newSingleConnectionScheduler(info *clientInfo) *singleConnectionScheduler {
-	mayExecuteNextRequestChan := make(chan struct{}, 0)
+	mayExecuteNextRequestChan := make(chan struct{}, 10)
 	return &singleConnectionScheduler{
 		mutex: &sync.Mutex{},
 
@@ -171,7 +171,7 @@ func (scheduler *singleConnectionScheduler) execute(reqBlock *requestControlBloc
 	if err != nil {
 		log.Printf(err.Error())
 		*reqBlock.requestError <- struct{}{}
-
+		return
 	}
 
 	reqDone := make(chan struct{})

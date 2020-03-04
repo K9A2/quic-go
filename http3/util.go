@@ -212,7 +212,6 @@ func getResponse(
 			res.StatusCode = status
 			res.Status = hf.Value + " " + http.StatusText(status)
 		default:
-			log.Printf("header key = <%v>, value = <%v>", hf.Name, hf.Value)
 			res.Header.Add(hf.Name, hf.Value)
 		}
 	}
