@@ -426,12 +426,14 @@ func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *reques
 	str, err := mainSession.OpenStreamSync(context.Background())
 	if err != nil {
 		log.Printf(err.Error())
+		*reqBlock.requestError <- struct{}{}
 		return
 	}
 
 	rsp, err := scheduler.getResponse(req, &str, &mainSession)
 	if err != nil {
 		log.Printf("mayDoRequestParallel %v", err.Error())
+		*reqBlock.requestError <- struct{}{}
 		return
 	}
 
@@ -440,9 +442,12 @@ func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *reques
 	// 读取响应体总长度，确定需要复制的总数据量，在主 go 程处值为 [0-EOF]
 	remainingDataLen, err := strconv.Atoi(rsp.Header.Get("Content-Length"))
 	if err != nil {
-		log.Printf(err.Error())
+		log.Printf("url = <%v>, err = <%v>", req.URL.RequestURI(), err.Error())
+		reqBlock.response = rsp
+		*reqBlock.requestDone <- struct{}{}
 		return
 	}
+	contentLength := remainingDataLen
 	// log.Printf("content-len = <%v>, url = <%v>", remainingDataLen, req.URL.RequestURI())
 
 	// 加上本次请求需要传输的数据量
@@ -466,6 +471,7 @@ func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *reques
 		written, bandwidth, err := readData(remainingDataLen, &mainBuffer, rsp)
 		if err != nil {
 			log.Printf(err.Error())
+			*reqBlock.requestError <- struct{}{}
 			return
 		}
 		// log.Printf("session = <%v>, url = <%v>, readDataLen = <%v>", reqBlock.designatedSession.id, reqBlock.request.URL.RequestURI(), written)
@@ -520,11 +526,12 @@ func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *reques
 	reqBlock.designatedSession.setIdle()
 
 	// 把主请求读取的数据添加到响应体中
-	respBody := newSegmentedResponseBody()
+	respBody := newSegmentedResponseBody(contentLength)
 	data := mainBuffer.Bytes()
 	respBody.addData(&data, 0)
 	if err != nil {
 		log.Printf(err.Error())
+		*reqBlock.requestError <- struct{}{}
 		return
 	}
 
@@ -533,6 +540,7 @@ func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *reques
 		bytesTransferredBySubRequests, err := strconv.Atoi(rsp.Header.Get("Content-Length"))
 		if err != nil {
 			log.Printf("ator error: %v", err.Error())
+			*reqBlock.requestError <- struct{}{}
 			return
 		}
 		bytesTransferredBySubRequests -= (mainBuffer.Len() + 1)
@@ -544,8 +552,6 @@ func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *reques
 			}
 		}
 	}
-	// 把零散的数据区合并为统一的分段
-	respBody.consolidate()
 
 	// 最终返回该响应
 	finalResponse := &http.Response{
@@ -567,12 +573,6 @@ func (scheduler *parallelRequestScheduler) execute(
 	quicSession quic.Session,
 	reqDone chan struct{},
 ) (*http.Response, requestError) {
-	// // 是否使用 gzip 压缩
-	// var requestGzip bool
-	// if !scheduler.roundTripperOpts.DisableCompression && req.Method != "HEAD" &&
-	// 	req.header.get("accept-encoding") == "" && req.Header.Get("Range") == "" {
-	// 	requestGzip = true
-	// }
 	requestGzip := isUsingGzip(scheduler.roundTripperOpts.DisableCompression,
 		req.Method, req.Header.Get("accept-encoding"), req.Header.Get("Range"))
 
