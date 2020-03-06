@@ -23,6 +23,13 @@ func newPseudoRequestControlBlock(
 	}
 }
 
+type subRequestControlBlock struct {
+	data          []byte // 子请求所获取的数据
+	contentLength int    // 子请求所获得的数据的字节数
+	startOffset   int    // 子请求所获得的数据相对于主请求的开始字节数
+	endOffset     int    // 子请求所获得的数据相对于主请求的终止字节数
+}
+
 type requestControlBlock struct {
 	isMainSession                bool // 是否为主请求
 	bytesStartOffset             int  // 响应体开始位置，用于让主请求拼装为完成的请求
@@ -43,9 +50,6 @@ type requestControlBlock struct {
 	designatedSession *sessionControlblock // 调度器指定用来承载该请求的 session
 }
 
-type subRequestControlBlock struct {
-	data          []byte // 子请求所获取的数据
-	contentLength int    // 子请求所获得的数据的字节数
-	startOffset   int    // 子请求所获得的数据相对于主请求的开始字节数
-	endOffset     int    // 子请求所获得的数据相对于主请求的终止字节数
+func (block *requestControlBlock) setContentLength(contentLength int) {
+	block.contentLength = contentLength
 }

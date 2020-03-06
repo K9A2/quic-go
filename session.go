@@ -1029,8 +1029,8 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber,
 				// 从队列中移除该 ping 包序号
 				s.ptm.PingPacketNumbers = append(s.ptm.PingPacketNumbers[:index], s.ptm.PingPacketNumbers[index+1:]...)
 				delete(s.ptm.packetNumberMap, packetNumber)
-				// 立刻向 ptm 实例主线程发送收到 ping 包确认的信号
-				s.ptm.newRTTSampleChan <- time.Now().Sub(sendTime).Milliseconds()
+				// 立刻向 ptm 实例主线程发送收到 ping 包确认的信号并转换为以秒为单位
+				s.ptm.newRTTSampleChan <- time.Now().Sub(sendTime).Microseconds()
 				break
 			}
 		}

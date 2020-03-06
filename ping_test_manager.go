@@ -32,12 +32,12 @@ type pingTestManager struct {
 	// 记录 ping 帧所在的数据包编号及其发送时间的 map
 	packetNumberMap map[protocol.PacketNumber]time.Time
 
-	rttSamples         []int64 // 采用定长的环形缓冲区计算延迟的移动平均值
-	averageRTT         float64 // rtt 样本的 10 次移动平均值，单位为毫秒，浮点数
-	nextSamplePosition int     // 环形缓冲区中下一可用空闲位置
+	rttSamples         []float64 // 采用定长的环形缓冲区计算延迟的移动平均值
+	averageRTT         float64   // rtt 样本的 10 次移动平均值，单位为毫秒，浮点数
+	nextSamplePosition int       // 环形缓冲区中下一可用空闲位置
 
-	sum         int64 // 计算移动 RTT 的移动平均值过程中用来计算所有样本之和
-	usedSamples int8  // 计算移动 RTT 的移动平均值过程中用来计算使用了多少个样本
+	sum         float64 // 计算移动 RTT 的移动平均值过程中用来计算所有样本之和
+	usedSamples int8    // 计算移动 RTT 的移动平均值过程中用来计算使用了多少个样本
 
 	parentSession *session // ptm 实例所属的 session 实例，用于下发 ping 帧
 }
@@ -52,7 +52,7 @@ func newPingTestManager(parentSession *session) *pingTestManager {
 		signalQueue:         make([]struct{}, 0),
 		newRTTSampleChan:    make(chan int64, 10),
 		toSendNextPingFrame: make(chan struct{}, 1),
-		rttSamples:          make([]int64, defaultMovingAverageSamples, defaultMovingAverageSamples),
+		rttSamples:          make([]float64, defaultMovingAverageSamples, defaultMovingAverageSamples),
 
 		// 添加父 session 指针
 		parentSession: parentSession,
@@ -100,11 +100,13 @@ func (ptm *pingTestManager) scheduleNextPingFrame() {
 }
 
 // updateAverageRTT 更新 ptm 实例中该连接的 RTT 样本的移动平均值
+// rttSample: 新的 rtt 样本，单位为 us
 func (ptm *pingTestManager) updateAverageRTT(rttSample int64) {
 	ptm.Mutex.Lock()
 	defer ptm.Mutex.Unlock()
 
-	ptm.rttSamples[ptm.nextSamplePosition] = rttSample
+	// 需要先转换为秒之后才能放入队列
+	ptm.rttSamples[ptm.nextSamplePosition] = float64(rttSample) / 1000.0 / 1000.0
 	// 移动到下一空位
 	ptm.nextSamplePosition = (ptm.nextSamplePosition + 1) % defaultMovingAverageSamples
 	ptm.sum = 0

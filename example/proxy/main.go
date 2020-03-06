@@ -57,7 +57,7 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	if hostname != "www.stormlin.com" {
 		// 请求的不是本地服务器，直接返回 404 Not Found 错误
 		http.Error(wr, "Not Found", http.StatusNotFound)
-		log.Printf("rejuect request with url = <%v>", hostname+requestURL)
+		// log.Printf("rejuect request with url = <%v>", hostname+requestURL)
 		return
 	}
 
@@ -86,13 +86,18 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 		wr.WriteHeader(http.StatusNotFound)
 		return
 	}
-	defer resp.Body.Close()
+	if resp.Body != nil {
+		// 部分请求可能会出现空响应体的情况, 所以只能在响应体非空的时候关闭它
+		defer resp.Body.Close()
+	}
 
 	// log.Printf("url = %v, statusCode = %v", requestURL, resp.StatusCode)
 	copyHeader(wr.Header(), resp.Header)
 	wr.WriteHeader(resp.StatusCode)
-	io.Copy(wr, resp.Body)
-	// log.Printf("request finished <%v>", requestURL)
+	if resp.Body != nil {
+		io.Copy(wr, resp.Body)
+	}
+	log.Printf("request finished <%v>", requestURL)
 }
 
 func main() {
@@ -105,7 +110,7 @@ func main() {
 		return
 	}
 
-	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0777)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err.Error())
 		return

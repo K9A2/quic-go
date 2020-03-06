@@ -68,6 +68,7 @@ func (body *segmentedResponseBodyI) run() {
 
 // addData 方法负责添加新的数据分段
 func (body *segmentedResponseBodyI) addData(data *[]byte, startOffset int) {
+	// log.Printf("addData: len = <%v>, offset = <%v>", len(*data), startOffset)
 	// 在主线程实现添加数据的方法，以免阻塞上层应用
 	*body.newDataAddedChan <- &newDataBlock{data, startOffset}
 }
