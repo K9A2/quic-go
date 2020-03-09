@@ -95,12 +95,18 @@ func main() {
 		return
 	}
 	defer logFile.Close()
+	log.Println("log file opened")
 
 	log.SetOutput(logFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 	log.Println("program started")
+
+	// 在后台运行数据收集器实例
+	collector := http3.NewStatisticsCollector()
+	go collector.Run()
+
 	var result int64
-	repeatFor := 50
+	repeatFor := 1
 	for i := 0; i < repeatFor; i++ {
 		fmt.Println(i)
 		timeStart := time.Now()
@@ -133,7 +139,9 @@ func main() {
 			log.Println("nil response body")
 		}
 		data, err := ioutil.ReadAll(resp.Body)
+		log.Println("before close resp body at main thread")
 		resp.Body.Close()
+		log.Println("resp.Body.Close()")
 		// for err == nil {
 		// 	// timeStart := time.Now()
 
@@ -157,7 +165,7 @@ func main() {
 			fmt.Println(err.Error())
 			return
 		}
-		// fmt.Println("output done")
+		log.Println("output done")
 		timeEnd := time.Now()
 		timeUsed := timeEnd.Sub(timeStart).Milliseconds()
 		result += timeUsed

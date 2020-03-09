@@ -61,7 +61,6 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// log.Printf("received request <%v>", requestURL)
 	if scheme != "http" && scheme != "https" {
 		msg := "unsupported protocal scheme <" + scheme + ">"
 		http.Error(wr, msg, http.StatusBadRequest)
@@ -71,6 +70,7 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 
 	// h2Client := &http.Client{}
 
+	log.Printf("received request <%v>", requestURL)
 	// 根据客户端的请求重新生成到远程服务器的请求
 	req, err := http.NewRequest(http.MethodGet, "https://"+hostname+requestURL, nil)
 	if err != nil {
@@ -92,6 +92,7 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	}
 
 	// log.Printf("url = %v, statusCode = %v", requestURL, resp.StatusCode)
+	log.Printf("main: start to copy response body for url = <%v>", req.URL.RequestURI())
 	copyHeader(wr.Header(), resp.Header)
 	wr.WriteHeader(resp.StatusCode)
 	if resp.Body != nil {

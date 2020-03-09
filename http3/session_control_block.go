@@ -31,27 +31,32 @@ func newSessionControlBlock(id int, session *quic.Session, canDispatched bool) *
 	return &sessionControlblock{mutex: sync.Mutex{}, id: id, session: session, canDispatched: canDispatched}
 }
 
+// TODO: 如果改为基于 pendingRequest 的决定方式, 则需要修改这三个函数
 /* 以下三个函数负责处理对 canDispatched 字段的操作 */
-func (block *sessionControlblock) setBusy() {
+func (block *sessionControlblock) setBusy(requestURL string) {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
 	// session 繁忙时不可被调度
-	block.canDispatched = false
-	log.Printf("setBusy: session = <%v>, candispatched = <%v>", block.id, block.canDispatched)
+	// block.canDispatched = false
+	before := block.pendingRequest
+	block.pendingRequest++
+	log.Printf("setBusy: session = <%v>, pendingRequest before <%v>, after = <%v>, url = <%v>", block.id, before, block.pendingRequest, requestURL)
 }
 
-func (block *sessionControlblock) setIdle() {
+func (block *sessionControlblock) setIdle(requestURL string) {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
 	// session 空闲时可被调度
-	block.canDispatched = true
-	log.Printf("setIdle: session = <%v>, candispatched = <%v>", block.id, block.canDispatched)
+	// block.canDispatched = true
+	before := block.pendingRequest
+	block.pendingRequest--
+	log.Printf("setIdle: session = <%v>, pendingRequest before <%v>, after = <%v>, url = <%v>", block.id, before, block.pendingRequest, requestURL)
 }
 
 func (block *sessionControlblock) dispatchable() bool {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
-	return block.canDispatched
+	return block.pendingRequest < 1
 }
 
 /* 以下是对 bandwidth 字段的处理方法 */

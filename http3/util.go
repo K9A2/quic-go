@@ -3,10 +3,12 @@ package http3
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -53,6 +55,50 @@ func getTimeToFinish(remainingDataLen int, bandwidth float64, rtt float64, newDa
 	}
 	timeToFinishLoadNewData := float64(newDataLen) / bandwidth
 	return timeToAvailable + timeToFinishLoadNewData
+}
+
+// copyToBuffer 把 HTTP 响应体中的数据复制到 buffer 中
+func copyToBuffer(buffer *segmentedResponseBody, rsp *http.Response) (int, float64, error) {
+	timeStart := time.Now()
+	written, err := io.CopyN(*buffer, rsp.Body, defaultBlockSize)
+	timeEnd := time.Now()
+	timeConsumed := timeEnd.Sub(timeStart).Microseconds()
+	bandwidth := float64(written) / float64(timeConsumed) * 1000000.0
+
+	if err != nil {
+		if err == io.EOF {
+			return int(written), bandwidth, nil
+		}
+		return 0, 0, err
+	}
+	return int(written), bandwidth, nil
+}
+
+// readDataBytes 从响应体中读取数据并返回读取到的数据
+// 返回值中包括实际读取的数据长度, 读取期间的平均带宽, 以及读取期间发生的错误 (没有
+// 错误则为 nil). 参数如下:
+// rsp: 作为数据来源的 HTTP 响应
+func readDataBytes(rsp *http.Response) (int, float64, *[]byte, error) {
+	buf := make([]byte, 4*1024) // 存放数据用的缓冲区
+	timeStart := time.Now()
+	written, err := rsp.Body.Read(buf) // 实际读出的字节数会保存在 written 中
+	timeEnd := time.Now()
+	timeConsumed := timeEnd.Sub(timeStart).Microseconds()
+	bandwidth := float64(written) / float64(timeConsumed) * 1000000.0
+
+	if err != nil {
+		if err == io.EOF {
+			// log.Println("readDataBytes: read all data")
+			// 读完了全部数据
+			return int(written), bandwidth, &buf, nil
+		}
+		// 出现错误
+		// log.Printf("readDataBytes: err = <%v>", err.Error())
+		return 0, 0, nil, err
+	}
+	// log.Printf("radDataBytes: return normal, written = <%v>, bandwidth = <%v>", written, bandwidth)
+	// 正常返回
+	return int(written), bandwidth, &buf, nil
 }
 
 // readData 方法负责读取数据，并返回读取的字节数和带宽
@@ -233,4 +279,71 @@ func getResponse(
 	}
 
 	return res, requestError{}
+}
+
+// CollectorAddr 为数据收集器的默认监听地址, 本机 UDP 8888 端口
+const CollectorAddr = "127.0.0.1:8888"
+
+// EndTimeMessage 记录了主请求以及子请求结束时间
+type EndTimeMessage struct {
+	Key                   int64       // 消息的 key, 为 HTTP/3 客户端被创建的时间
+	MainRequestFinishTime time.Time   // 主请求结束时间
+	SubRequestFinishTime  []time.Time // 子请求结束时间
+}
+
+// StatisticsCollector 负责收集运行数据
+type StatisticsCollector struct {
+}
+
+// NewStatisticsCollector 创建数据收集器实例并返回其指针
+func NewStatisticsCollector() *StatisticsCollector {
+	return &StatisticsCollector{}
+}
+
+// Run 运行收集器主线程
+func (collector *StatisticsCollector) Run() {
+	listener, err := net.ListenPacket("udp", CollectorAddr)
+	if err != nil {
+		log.Printf("collector: error in listening: %v", err.Error())
+		return
+	}
+
+	log.Printf("collector: running at <%v>", listener.LocalAddr().String())
+
+	for {
+		buf := make([]byte, 1024)
+		written, remoteAddr, err := listener.ReadFrom(buf)
+		if err != nil {
+			log.Printf("collector: error in accepting conn: %v", err.Error())
+			return
+		}
+		log.Printf("collector: read <%v> from <%v>", written, remoteAddr)
+		go handlePacket(&buf)
+	}
+}
+
+// handlePacket 处理到来的 UDP 数据包
+func handlePacket(buf *[]byte) {
+	receivedBuf := bytes.NewBuffer(*buf)
+	var receivedMessage EndTimeMessage
+	if err := binary.Read(receivedBuf, binary.LittleEndian, &receivedMessage); err != nil {
+		log.Printf("handleConn: error in parsing message from udp conn")
+	}
+	log.Printf("received message: main request = <%v>, sub requests = <%v>",
+		receivedMessage.MainRequestFinishTime, receivedMessage.SubRequestFinishTime)
+}
+
+// sendToStatisticCollector 发送数据到 collector
+func sendToStatisticCollector(message *EndTimeMessage) {
+	sendBuf := bytes.Buffer{}
+	if err := binary.Write(&sendBuf, binary.LittleEndian, message); err != nil {
+		log.Printf("send message error: %v", err.Error())
+		return
+	}
+	conn, err := net.Dial("udp", CollectorAddr)
+	if err != nil {
+		log.Printf("error in dialing to collector: %v", err.Error())
+		return
+	}
+	conn.Write(sendBuf.Bytes())
 }
