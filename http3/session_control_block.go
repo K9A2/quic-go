@@ -19,7 +19,7 @@ type sessionControlblock struct {
 
 	// 基于最新样本计算的信道参数
 	rtt       float64 // 该连接的 rtt
-	bandwdith float64 // 该连接的带宽
+	bandwidth float64 // 该连接的带宽
 
 	pendingRequest   int // 该 session 上承载的请求数目
 	remainingDataLen int // 该 session 上仍需加载的数据量
@@ -30,31 +30,23 @@ func newSessionControlBlock(id int, session *quic.Session, canDispatched bool) *
 	return &sessionControlblock{mutex: sync.Mutex{}, id: id, session: session, canDispatched: canDispatched}
 }
 
-// TODO: 如果改为基于 pendingRequest 的决定方式, 则需要修改这三个函数
-/* 以下三个函数负责处理对 canDispatched 字段的操作 */
+/* 以下三个函数负责处理对 pendingRequest 字段的操作 */
 func (block *sessionControlblock) setBusy(requestURL string) {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
-	// session 繁忙时不可被调度
-	// block.canDispatched = false
-	// before := block.pendingRequest
 	block.pendingRequest++
-	// log.Printf("setBusy: session = <%v>, pendingRequest before <%v>, after = <%v>, url = <%v>", block.id, before, block.pendingRequest, requestURL)
 }
 
 func (block *sessionControlblock) setIdle(requestURL string) {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
-	// session 空闲时可被调度
-	// block.canDispatched = true
-	// before := block.pendingRequest
 	block.pendingRequest--
-	// log.Printf("setIdle: session = <%v>, pendingRequest before <%v>, after = <%v>, url = <%v>", block.id, before, block.pendingRequest, requestURL)
 }
 
 func (block *sessionControlblock) dispatchable() bool {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
+	// session 上有超过一个正在处理的请求则不可以被用来处理新的请求
 	return block.pendingRequest < 1
 }
 
@@ -62,13 +54,13 @@ func (block *sessionControlblock) dispatchable() bool {
 func (block *sessionControlblock) getBandwidth() float64 {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
-	return block.bandwdith
+	return block.bandwidth
 }
 
 func (block *sessionControlblock) setBandwidth(bandwidth float64) {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
-	block.bandwdith = bandwidth
+	block.bandwidth = bandwidth
 }
 
 /* 以下函数是对 remainingDataLen 字段的操作方法 */
