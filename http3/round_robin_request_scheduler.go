@@ -102,7 +102,7 @@ func (scheduler *roundRobinRequestScheduler) addAndWait(req *http.Request) (*htt
 		requestError: &requestError,
 	}
 	scheduler.addNewRequest(&reqBlock)
-	log.Printf("new request added, url = <%v>", req.URL.RequestURI())
+	// log.Printf("new request added, url = <%v>", req.URL.RequestURI())
 
 	for {
 		select {
@@ -129,7 +129,7 @@ func (scheduler *roundRobinRequestScheduler) addNewSession() {
 	scheduler.openedSession = append(scheduler.openedSession, newSessionBlock)
 	scheduler.Unlock()
 	*scheduler.newSessionAdded <- struct{}{}
-	log.Printf("new session added: id = <%v>", newSessionBlock.id)
+	// log.Printf("new session added: id = <%v>", newSessionBlock.id)
 }
 
 // getSession 方法返回当前可用的 quicSession

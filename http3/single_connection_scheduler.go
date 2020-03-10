@@ -102,8 +102,8 @@ func (scheduler *singleConnectionScheduler) addAndWait(req *http.Request) (*http
 		requestError: &requestError,
 	}
 	scheduler.addNewRequest(&reqBlock)
-	log.Printf("addAndWait: queue len = <%v>, req = <%v>",
-		len(scheduler.requestQueue), req.URL.RequestURI())
+	// log.Printf("addAndWait: queue len = <%v>, req = <%v>",
+	// 	len(scheduler.requestQueue), req.URL.RequestURI())
 
 	for {
 		select {
@@ -163,7 +163,7 @@ func (scheduler *singleConnectionScheduler) getSession() *sessionControlblock {
 		log.Printf("getSession: return the only session")
 		return scheduler.openedSession[0]
 	}
-	log.Printf("getSession: establishing the initial session to <%v>", scheduler.hostname)
+	// log.Printf("getSession: establishing the initial session to <%v>", scheduler.hostname)
 	// 还没有打开唯一的一条 quicSession，需要立刻打开
 	newSession, err := dial(scheduler.hostname, scheduler.tlsConfig, scheduler.quicConfig)
 	if err != nil {

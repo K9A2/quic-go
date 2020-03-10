@@ -110,7 +110,7 @@ func (scheduler *parallelRequestScheduler) run() {
 	for {
 		select {
 		case <-*scheduler.mayExecuteNextRequest:
-			log.Println("received mayExecuteNextRequest signal")
+			// log.Println("received mayExecuteNextRequest signal")
 			// 执行主请求
 			nextRequest, err := scheduler.mayExecute()
 			if err == nil {
@@ -223,29 +223,29 @@ func (scheduler *parallelRequestScheduler) getSession() (*sessionControlblock, e
 
 // mayExecute 方法负责在调度器队列中寻找可执行的下一请求
 func (scheduler *parallelRequestScheduler) mayExecute() (*requestControlBlock, error) {
-	log.Println("mayExecute: before lock")
+	// log.Println("mayExecute: before lock")
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
 
 	// 获取可用的请求
-	log.Println("in mayExecute")
+	// log.Println("in mayExecute")
 	// FIXME: 这里似乎会锁住整个调度器, 但是加了日志之后似乎重复不出来, 就这样放着先吧
 	nextRequest, index := scheduler.popRequest()
 	if nextRequest == nil {
-		log.Println("mayExecute: no available request")
+		// log.Println("mayExecute: no available request")
 		return nil, errNoAvailableRequest
 	}
-	log.Printf("mayExecute: url = <%v>", nextRequest.request.URL.RequestURI())
+	// log.Printf("mayExecute: url = <%v>", nextRequest.request.URL.RequestURI())
 
 	// 获取可用的 quic 连接
 	availableSession, err := scheduler.getSession()
 	if err != nil {
-		log.Println("mayExecute: no available session")
+		// log.Println("mayExecute: no available session")
 		return nil, errNoAvailableSession
 	}
 	availableSession.setBusy(nextRequest.request.URL.RequestURI())
-	log.Printf("mayExecute: url = <%v> session id = <%v>, pendingRequest = <%v>",
-		nextRequest.request.URL.RequestURI(), availableSession.id, availableSession.pendingRequest)
+	// log.Printf("mayExecute: url = <%v> session id = <%v>, pendingRequest = <%v>",
+	// 	nextRequest.request.URL.RequestURI(), availableSession.id, availableSession.pendingRequest)
 
 	// 从调度器的待执行队列中删去即将执行的 requestControlBlock
 	// if len(*scheduler.documentQueue) > 0 {
@@ -342,9 +342,9 @@ func (scheduler *parallelRequestScheduler) addAndWait(req *http.Request) (*http.
 
 // signalRequestDone 向调度器声明该请求已完成
 func (scheduler *parallelRequestScheduler) signalRequestDone(reqBlock *requestControlBlock) {
-	log.Println("signalRequestDone: before lock")
+	// log.Println("signalRequestDone: before lock")
 	scheduler.mutex.Lock()
-	log.Println("signalRequestDone: lock acquired")
+	// log.Println("signalRequestDone: lock acquired")
 
 	if reqBlock.url != "" {
 		reqBlock.designatedSession.setIdle(reqBlock.url)
@@ -352,11 +352,11 @@ func (scheduler *parallelRequestScheduler) signalRequestDone(reqBlock *requestCo
 		reqBlock.designatedSession.setIdle(reqBlock.request.URL.RequestURI())
 	}
 	*reqBlock.requestDone <- struct{}{}
-	log.Printf("signalRequestDone: chan len = <%d>", len(*scheduler.mayExecuteNextRequest))
+	// log.Printf("signalRequestDone: chan len = <%d>", len(*scheduler.mayExecuteNextRequest))
 	*scheduler.mayExecuteNextRequest <- struct{}{}
 
 	scheduler.mutex.Unlock()
-	log.Println("signalRequestDone: lock released")
+	// log.Println("signalRequestDone: lock released")
 }
 
 // signalRequestError 向调度器声明该请求出现错误
@@ -441,9 +441,9 @@ func (scheduler *parallelRequestScheduler) shouldUseParallelTransmission(
 		}
 
 		// 添加伪请求控制块，避免修改原控制块
-		// log.Printf("shoudUseParallelTransmission: bandwidth = <%v>, rtt = <%v>", bandwidth, rtt)
+		// log.Printf("shouldUseParallelTransmission: bandwidth = <%v>, rtt = <%v>", bandwidth, rtt)
 		timeToFinish := getTimeToFinish(block.getRemainingDataLen(), bandwidth, rtt, blocksToSplitted*blockSize)
-		// log.Printf("shoudUseParallelTransmission: session = <%v>, timeToFinish = <%v>, remainingDataLen = <%v>, bandwidth = <%v>", block.id, timeToFinish, block.getRemainingDataLen(), block.getBandwidth())
+		// log.Printf("shouldUseParallelTransmission: session = <%v>, timeToFinish = <%v>, remainingDataLen = <%v>, bandwidth = <%v>", block.id, timeToFinish, block.getRemainingDataLen(), block.getBandwidth())
 		subReqeuestSessions = append(subReqeuestSessions, newPseudoRequestControlBlock(block, timeToFinish))
 		timeSum += timeToFinish
 	}
@@ -492,12 +492,15 @@ func (scheduler *parallelRequestScheduler) shouldUseParallelTransmission(
 
 	// 计算各子请求应当传输的数据块
 	// TODO: 把数据的分布改成 raid 0 一样的条状分布
+	// log.Printf("shouldUseParallelTransmission: len subRequestSession = <%v>", len(subReqeuestSessions))
 	for _, block := range subReqeuestSessions {
 		if remainingDataSubReqs < 0 {
 			break
 		}
+		// 向下取整, 小于一块的数据数据量舍去不计
 		numBlocks := int(math.Ceil(block.share / shareSum * float64(blocksToSplitted)))
-		if numBlocks == 1 {
+		// log.Printf("shouldUseParallelTransmission: numBlocks = <%v>", numBlocks)
+		if numBlocks < 1 {
 			// 该子请求将传送少于等于一块的数据。这一点数据由上一子请求传送，以减少一个请求。
 			break
 		}
@@ -696,7 +699,7 @@ func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *reques
 			reqBlock.shoudUseParallelTransmission = false
 			// 把需要开始的子请求发送到调度器
 			*scheduler.subRequestsChan <- subReqs
-			// log.Printf("use parallel request, subReq count = <%v>, url = <%v>", len(*subReqs), mainRequestURL)
+			log.Printf("use parallel request, subReq count = <%v>, url = <%v>", len(*subReqs), mainRequestURL)
 		}
 	}
 	// 读取完指定数据段之后立刻关闭这条 stream
@@ -883,7 +886,7 @@ func (scheduler *parallelRequestScheduler) executeSubRequest(reqBlock *requestCo
 	for remainingDataLen > 0 {
 		// TODO: 实现提前一个 RTT 发起请求的功能
 		if shouldSendPrestartSignal(remainingDataLen) {
-			log.Printf("prestart: can send signal, remainingDataLen = <%d>, contentLength = <%d>", remainingDataLen, contentLength)
+			// log.Printf("prestart: can send signal, remainingDataLen = <%d>, contentLength = <%d>", remainingDataLen, contentLength)
 			once.Do(func() {
 				// 发送信号给调度器以触发下一请求
 				// log.Println("subRequest: sending signal to next request")
