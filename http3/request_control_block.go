@@ -31,11 +31,11 @@ type subRequestControlBlock struct {
 }
 
 type requestControlBlock struct {
-	isMainSession                bool // 是否为主请求
-	bytesStartOffset             int  // 响应体开始位置，用于让主请求拼装为完成的请求
-	bytesEndOffset               int  // 响应体结束位置，同上
-	shoudUseParallelTransmission bool // 是否需要使用并行传输
-	subRequestDispatched         bool // 是否已经下发子请求
+	isMainSession                 bool // 是否为主请求
+	bytesStartOffset              int  // 响应体开始位置，用于让主请求拼装为完成的请求
+	bytesEndOffset                int  // 响应体结束位置，同上
+	shouldUseParallelTransmission bool // 是否需要使用并行传输
+	subRequestDispatched          bool // 是否已经下发子请求
 
 	url            string                        // 请求的 url，只在子请求是使用
 	request        *http.Request                 // 对应的 http 请求
@@ -48,8 +48,24 @@ type requestControlBlock struct {
 	unhandledError error          // 处理 response 过程中发生的错误
 
 	designatedSession *sessionControlblock // 调度器指定用来承载该请求的 session
+
+	finalResponseBody segmentedResponseBody        // 指向总请求分段响应体的指针
+	bufferBlock       *segmentedBufferControlBlock // 指向属于该子连接的分段请求体的指针
+
+	blockSize int64 // 读取数据时的块大小
 }
 
+// setBlockSize 设置此请求读取数据时的块大小
+func (block *requestControlBlock) setBlockSize(size int64) {
+	block.blockSize = size
+}
+
+// getBlockSize 返回此请求读取数据的块大小
+func (block *requestControlBlock) getBlockSize() int64 {
+	return block.blockSize
+}
+
+// setContentLength 设置此请求的字节流长度
 func (block *requestControlBlock) setContentLength(contentLength int) {
 	block.contentLength = contentLength
 }

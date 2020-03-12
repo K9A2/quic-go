@@ -57,12 +57,12 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	if hostname != "www.stormlin.com" {
 		// 请求的不是本地服务器，直接返回 404 Not Found 错误
 		http.Error(wr, "Not Found", http.StatusNotFound)
-		// log.Printf("rejuect request with url = <%v>", hostname+requestURL)
+		// log.Printf("reject request with url = <%v>", hostname+requestURL)
 		return
 	}
 
 	if scheme != "http" && scheme != "https" {
-		msg := "unsupported protocal scheme <" + scheme + ">"
+		msg := "unsupported protocol scheme <" + scheme + ">"
 		http.Error(wr, msg, http.StatusBadRequest)
 		log.Println(msg)
 		return

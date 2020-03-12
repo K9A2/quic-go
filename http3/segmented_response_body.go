@@ -7,6 +7,49 @@ import (
 	"sync"
 )
 
+// segmentedBufferControlBlock 是有序 buffer 队列中的对象
+type segmentedBufferControlBlock struct {
+	sync.Mutex
+
+	sessionBlockID int
+	start          int
+	end            int
+	buffer         *bytes.Buffer
+	readDataLen    int
+
+	dataSize int
+	readSize int
+}
+
+// Read 以同步方式从 segmentedBufferControlBlock 中的缓冲区读取数据
+func (body *segmentedBufferControlBlock) Read(p []byte) (int, error) {
+	body.Lock()
+	defer body.Unlock()
+
+	read, err := body.buffer.Read(p)
+	if err != nil {
+		if err != io.EOF {
+			log.Printf("Read: error in reading buffer = <%p>, err = <%s>", body.buffer, err.Error())
+		}
+	}
+	body.readSize += read
+	// log.Printf("Read: read <%d> bytes from buffer <%p>, buffer.readSize = <%d>", read, body.buffer, body.readSize)
+	return read, err
+}
+
+// Write 以同步方式向 segmentedBufferControlBlock 中的缓冲区写入数据
+func (body *segmentedBufferControlBlock) Write(p []byte) (int, error) {
+	body.Lock()
+	defer body.Unlock()
+	written, err := body.buffer.Write(p)
+	if err != nil {
+		log.Printf("Write: error in writting buffer = <%p>, err = <%s>", body.buffer, err.Error())
+	}
+	body.dataSize += written
+	// log.Printf("Write: write <%d> bytes to buffer <%p>, buffer.dataSize = <%d>", written, body.buffer, body.dataSize)
+	return written, err
+}
+
 // newDataBlock 是对上层添加的数据及其起始位置的包装结构体
 type newDataBlock struct {
 	data        *[]byte // 数据段指针
@@ -22,6 +65,12 @@ type segmentedResponseBody interface {
 
 	// addData 方法提供添加新的数据分段的接口
 	addData(data *[]byte, written int, offset int)
+	// registerSegmentedBuffer 向分段响应体绑定缓冲区和对应的 sessionBlockID
+	registerSegmentedBuffer(*segmentedBufferControlBlock)
+	// setBufferBound 以原缓冲器的起始字节数为键设置对应的缓冲区的上下限
+	setBufferBound(int, int, int, int)
+	// signaleDataArrival 方法通知读线程开始工作
+	signaleDataArrival()
 }
 
 // segmentedResponseBody 接口的实现类
@@ -39,6 +88,9 @@ type segmentedResponseBodyI struct {
 	newDataAddedChan *chan *newDataBlock // 加入新数据时向此 chan 发送信号以在主线程添加数据
 	closeChan        *chan struct{}      // 需要关闭该 body 时向该 chan 发送数据
 	canReadChan      *chan struct{}      // 可以读取数据时向该 chan 发送消息
+
+	bufferList              []*segmentedBufferControlBlock // buffer 控制块队列
+	currentBufferBlockIndex int                            // 当前正在读 bufferList 中哪一块 buffer
 }
 
 // newSegmentedResponseBody 返回一个新的 SegmentedResponseBody 实例
@@ -47,7 +99,6 @@ func newSegmentedResponseBody(contentLength int) segmentedResponseBody {
 	newDataChan := make(chan *newDataBlock, 10)
 	closeChan := make(chan struct{})
 	canReadChan := make(chan struct{}, 1000)
-	// log.Printf("newSegmentedResponseBody: canReadChan addr = <%v>", &canReadChan)
 	body := segmentedResponseBodyI{
 		mainBuffer:    bytes.Buffer{},
 		dataMap:       &dataMap,
@@ -56,6 +107,8 @@ func newSegmentedResponseBody(contentLength int) segmentedResponseBody {
 		newDataAddedChan: &newDataChan,
 		closeChan:        &closeChan,
 		canReadChan:      &canReadChan,
+
+		bufferList: make([]*segmentedBufferControlBlock, 0),
 	}
 	// 在后台运行 body 主线程
 	go body.run()
@@ -67,12 +120,10 @@ func (body *segmentedResponseBodyI) run() {
 	for {
 		select {
 		case newData := <-*body.newDataAddedChan:
-			// log.Printf("addDataImpl: len = <%v>, offset = <%v>", newData.written, newData.startOffset)
 			// 有新的数据到达，在主线程整理数据
 			body.addDataImpl(newData.data, newData.written, newData.startOffset)
 		case <-*body.closeChan:
 			// 需要关闭 body 主线程，直接 return 即可
-			// log.Printf("body close")
 			return
 		}
 	}
@@ -80,7 +131,6 @@ func (body *segmentedResponseBodyI) run() {
 
 // addData 方法负责添加新的数据分段
 func (body *segmentedResponseBodyI) addData(data *[]byte, written int, startOffset int) {
-	// log.Printf("addData: len = <%v>, offset = <%v>", len(*data), startOffset)
 	// 在主线程实现添加数据的方法，以免阻塞上层应用
 	*body.newDataAddedChan <- &newDataBlock{data, written, startOffset}
 }
@@ -90,18 +140,13 @@ func (body *segmentedResponseBodyI) addDataImpl(data *[]byte, written int, start
 	body.mutex.Lock()
 	defer body.mutex.Unlock()
 
-	// log.Printf("addDataImpl: offset = <%v>, len = <%v>, lock body", startOffset, written)
 	// 增加储存的数据总量
 	body.dataSize += written
-
-	/* 如果新增的数据段能够和 mianBuffer 中的数据相连接 */
+	/* 如果新增的数据段能够和 mainBuffer 中的数据相连接 */
 	if startOffset == body.offset {
 		// 如果写入的数据是 buffer 最前端的数据，则直接把写入的数据添加到 mainBuffer 中
-		// body.mainBuffer.Write((*data)[:written])
-		// body.Write(*data)
 		written, err := body.mainBuffer.Write(*data)
 		if err != nil {
-			// log.Printf("addDataImpl: error in adding data: err = <%v>", err.Error())
 			// TODO: 暂时用 return 代替具体的错误处理操作
 			return
 		}
@@ -109,7 +154,6 @@ func (body *segmentedResponseBodyI) addDataImpl(data *[]byte, written int, start
 		// 设置新的 offset
 		body.offset += written
 		body.dataSize += written
-		// log.Printf("addDataImpl: before consolidate loop: offset = <%v>, len = <%v>", startOffset, len(*data))
 
 		// 从被新添加的数据的结束位置开始，寻找下一个能够从后方连上的数据分段
 		for {
@@ -121,29 +165,20 @@ func (body *segmentedResponseBodyI) addDataImpl(data *[]byte, written int, start
 				break
 			}
 			// 找打了下一个连续的数据分段，需要把它写进 mainBuffer 之中
-			// body.mainBuffer.Write(*dataSegment)
-			// log.Printf("addDataImpl: found continuous data segment at offset = <%v>", body.offset)
-			// body.Write(*dataSegment)
 			written, err := body.mainBuffer.Write(*dataSegment)
 			if err != nil {
 				log.Printf("addDataImpl: error in adding data: err = <%v>", err.Error())
 				return
 			}
+			// 声明有新的数据可供读取
 			*body.canReadChan <- struct{}{}
 			delete(*body.dataMap, startOffset)
 			body.offset += written
 		}
-		// 声明有新的数据可供读取
-		// log.Printf("addDataImpl: wrapped canReadChan addr = <%v>", body.canReadChan)
-		// log.Println("addDataImpl: before send signal")
-		// *body.canReadChan <- struct{}{}
-		// log.Printf("addDataImpl: after send to canReadChan : offset = <%v>, len = <%v>", startOffset, len(*data))
-		// log.Println("addDataImpl: lock released")
 		return
 	}
 
-	/* 如果新增的数据段不能和 mianBuffer 中的数据相连接 */
-	// log.Printf("addDataImpl: add isolated data segment at offset = <%v>", startOffset)
+	/* 如果新增的数据段不能和 mainBuffer 中的数据相连接 */
 	tmpStartOffset := startOffset + written // 临时使用的起始位置，初始值为新添加分段的终止位置
 	// 把后面能连上的其他数据分段都拼到该分段上，并从 dataMap 中删除这些分段的 entry
 	for {
@@ -158,7 +193,6 @@ func (body *segmentedResponseBodyI) addDataImpl(data *[]byte, written int, start
 	}
 	// 这一段数据并不是与 buffer 相连续的部分，放到临时空间中存放
 	(*body.dataMap)[startOffset] = data
-	// log.Println("addDataImpl: lock released")
 }
 
 // Write 向分段响应体写入数据
@@ -169,65 +203,135 @@ func (body *segmentedResponseBodyI) Write(buf []byte) (int, error) {
 	*body.canReadChan <- struct{}{}
 	body.offset += len(buf)
 	body.dataSize += len(buf)
-	// log.Printf("Write: offset = <%v>, len = <%v>", body.offset, len(buf))
 	return body.mainBuffer.Write(buf)
 }
 
 // Read 方法对外提供读取内部连续数据区的接口
 func (body *segmentedResponseBodyI) Read(buf []byte) (int, error) {
-	// log.Println("Read: before obtain early check lock")
 	body.mutex.Lock()
 	if body.readDataLen == body.contentLength {
 		// 已经读完全部数据, 直接返回 EOF 让上层应用停止即可
-		// log.Println("Read: early check lock released")
 		body.mutex.Unlock()
 		return 0, io.EOF
 	}
 	if len(*body.canReadChan) < 1 {
 		// 还有数据可供读取, 但 chan 中没有足够的信号, 需要手动发一个信号给 chan 以触发读取过程
-		// log.Println("Read: manually triggered read proces")
 		*body.canReadChan <- struct{}{}
 	}
 	body.mutex.Unlock()
-	// log.Println("Read: early check lock released")
 
-	// log.Printf("Read: before select block, chan len = <%v>", len(*body.canReadChan))
 skipReadOperation:
 	select {
 	case <-*body.canReadChan:
-		// log.Printf("Read: prepare to read, current offset = <%v>", body.readDataLen)
 		// 有新的数据可供读取
 		body.mutex.Lock()
-		// log.Println("Read: lock obtained")
-		written, err := body.mainBuffer.Read(buf)
+		targetBuffer := body.bufferList[body.currentBufferBlockIndex]
+		written, err := targetBuffer.Read(buf)
 		body.readDataLen += written
-		// if err != nil {
-		// 	log.Printf("Read: application read <%v> bytes, readDataLen = <%v>, contentLength = <%v>, err = <%v>",
-		// 		written, body.readDataLen, body.contentLength, err.Error())
-		// } else {
-		// 	log.Printf("Read: application read <%v> bytes, readDataLen = <%v>, contentLength = <%v>, no error",
-		// 		written, body.readDataLen, body.contentLength)
-		// }
-		if written == 0 && err != nil {
-			// 这里可能出现两种情况, 使得从 mainBuffer 中读到的数据长度为零, 并且错误为 EOF:
-			// 1. 写进程跟不上读进程
-			// 2. 真的读完全部数据了
-			// log.Printf("Read: 0 len buffer: err = <%v>", err.Error())
-			if body.readDataLen == body.contentLength {
-				// 读完全部数据, 直接按照实际结果返回即可
-				log.Printf("Read: all data read")
-				return 0, err
-			}
-			// 只是写进程没跟上, 等写进程跟上就好了
-			// log.Printf("Read: skip this read operation")
-			body.mutex.Unlock()
-			// log.Println("Read: lock released")
-			goto skipReadOperation // buffer 中现在没有数据可供读取, 阻塞至下一次读取信号到来
+		targetBuffer.readDataLen += written
+
+		// log.Printf("Read: original data: written = <%d>, err = <%v>, buffer addr = <%p>", written, err, targetBuffer.buffer)
+
+		// TODO: 需要重做这一段的控制逻辑
+		if err != nil && err != io.EOF {
+			// 出现了其他错误，由上层处理
+			log.Printf("Read: unexpected error = <%s>", err.Error())
+			return written, err
 		}
+
+		if err != nil {
+			// 从这里开始，下面各项的 err 都是 EOF 错误。如果上层收到 EOF 错误，则
+			// 会认为所有数据已经被读完，并终止读取操作。因此，在没读完的时候需要屏蔽
+			// 掉 buffer 返回 EOF 错误。这里可能出现以下几种情况，使得读到 EOF 错误：
+			// 1. 写进程跟不上读进程
+			// 2. 读完当前 buffer 的数据
+			// 3. 真的读完全部数据了
+			if targetBuffer.readDataLen < (targetBuffer.end - targetBuffer.start + 1) {
+				// 写线程跟不上读线程，表现是本段 buffer 的读取字节数小于应读字节数
+				// log.Println("Read: read thread too fast")
+				body.mutex.Unlock()
+				if written != 0 {
+					// 已经读到了一部分字节，需要手工除掉返回的 EOF 错误
+					return written, nil
+				}
+				// 一个字节都没读到，则进行下一回合，等待写线程写入数据之后再行读取
+				goto skipReadOperation
+			}
+
+			// 从这里开始，下面就是这一个 buffer 的全部数据都已经被读完，有两种处理方式
+			// 1. 对于仅读完本 buffer 的数据而尚未读完请求所声明的全部数据，则切换到下一个 buffer，
+			//    如果已经读到部分字节，则返回这些已经读到的字节；否则阻塞至有新数据到达
+			// 2. 对于读完请求声明的全数据，则我们返回 (0, EOF) 即可。
+			if body.readDataLen == body.contentLength {
+				// 读完全部数据
+				// log.Printf("Read: all response body data read, readDataLen = <%d>, contentLength = <%d>", body.readDataLen, body.contentLength)
+				body.mutex.Unlock()
+				if written != 0 {
+					// 读到最后一块数据
+					return written, io.EOF
+				}
+				// 上一次操作刚好读完全部数据，使得本次操作没有读到任何数据
+				return 0, io.EOF
+			}
+
+			// FIXME: 切换到下一个 buffer 的条件有问题
+			// log.Printf("Read: ---- switch to next buffer ----")
+			// log.Printf("Read: targetBuffer: readDataLen = <%d>, contentLength = <%d>, addr = <%p>",
+			// targetBuffer.readDataLen, targetBuffer.end-targetBuffer.start+1, targetBuffer.buffer)
+			// log.Printf("Read: body.readDataLen = <%v>, body.contentLength = <%v>", body.readDataLen, body.contentLength)
+			// 没有读到任何数据就遇到 EOF 了
+			// log.Printf("Read: move to next buffer")
+			body.currentBufferBlockIndex++
+			// log.Printf("Read: old buffer: start = <%d>, end = <%d>", targetBuffer.start, targetBuffer.end)
+			// log.Printf("Read: next buffer: start = <%d>, end = <%d>",
+			// body.bufferList[body.currentBufferBlockIndex].start, body.bufferList[body.currentBufferBlockIndex].end)
+			// log.Printf("Read: ---- switch to next buffer ----")
+			// 发送一个信号以触发下一次读操作
+			*body.canReadChan <- struct{}{}
+			body.mutex.Unlock()
+			goto skipReadOperation
+		}
+		// log.Printf("Read: application readDataLen = <%d>, body.readDataLen = <%v>, buffer.readDataLen = <%v>",
+		// written, body.readDataLen, targetBuffer.readDataLen)
 		body.mutex.Unlock()
-		// log.Println("Read: lock released")
+		// 正常返回读到的字节数和 nil 错误
 		return written, err
 	}
+}
+
+// registerSegmentedBuffer 向分段响应体绑定缓冲区和对应的 session
+func (body *segmentedResponseBodyI) registerSegmentedBuffer(bufferBlock *segmentedBufferControlBlock) {
+	body.mutex.Lock()
+	defer body.mutex.Unlock()
+
+	// log.Printf("register: session = <%d>, start = <%d>, end = <%d>, buf addr = <%p>, buf len = <%d>",
+	// bufferBlock.sessionBlockID, bufferBlock.start, bufferBlock.end, bufferBlock.buffer, bufferBlock.buffer.Len())
+	/* 对这一块 buffer 创建对应的控制块并添加到 buffer 控制块队列中的适当位置上 */
+	body.bufferList = append(body.bufferList, bufferBlock)
+	// log.Printf("register: body.bufferList addr = <%p>, len = <%d>", &body.bufferList, len(body.bufferList))
+	// 发送可读信号，但不保证一定可以读到数据
+	*body.canReadChan <- struct{}{}
+}
+
+// setBufferBound 以 sessionBlockID 为键设置对应的 buffer 的字节流起始位置
+func (body *segmentedResponseBodyI) setBufferBound(oldStart int, oldEnd int, newStart int, newEnd int) {
+	body.mutex.Lock()
+	defer body.mutex.Unlock()
+
+	for _, bufferBlock := range body.bufferList {
+		if bufferBlock.start == oldStart && bufferBlock.end == oldEnd {
+			// log.Printf("setBufferBound: hit, oldStart = <%d>, oldEnd = <%d>, newStart = <%d>, newEnd = <%d>",
+			// 	oldStart, oldEnd, newStart, newEnd)
+			// 找到了目标 buffer 控制块
+			bufferBlock.start = newStart
+			bufferBlock.end = newEnd
+		}
+	}
+}
+
+// signaleDataArrival 方法通知读线程可以读数据
+func (body *segmentedResponseBodyI) signaleDataArrival() {
+	*body.canReadChan <- struct{}{}
 }
 
 // Close 方法负责关闭该示例相关的各种资源

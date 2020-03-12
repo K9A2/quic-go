@@ -58,19 +58,25 @@ func getTimeToFinish(remainingDataLen int, bandwidth float64, rtt float64, newDa
 }
 
 // copyToBuffer 把 HTTP 响应体中的数据复制到 buffer 中
-func copyToBuffer(buffer *segmentedResponseBody, rsp *http.Response) (int, float64, error) {
+func copyToBuffer(buffer *segmentedBufferControlBlock, rsp *http.Response, blockSize int64, remainingDataLen int) (int, float64, error) {
+	if int64(remainingDataLen) < blockSize {
+		blockSize = int64(remainingDataLen)
+	}
 	timeStart := time.Now()
-	written, err := io.CopyN(*buffer, rsp.Body, defaultBlockSize)
+	written, err := io.CopyN(buffer, rsp.Body, blockSize)
 	timeEnd := time.Now()
 	timeConsumed := timeEnd.Sub(timeStart).Microseconds()
 	bandwidth := float64(written) / float64(timeConsumed) * 1000000.0
 
 	if err != nil {
 		if err == io.EOF {
+			// 暂时没有数据可供复制
 			return int(written), bandwidth, nil
 		}
+		// 出错
 		return 0, 0, err
 	}
+	// 正常返回
 	return int(written), bandwidth, nil
 }
 
@@ -346,4 +352,27 @@ func sendToStatisticCollector(message *EndTimeMessage) {
 		return
 	}
 	conn.Write(sendBuf.Bytes())
+}
+
+const (
+	// KB 是 1KB 数据的长度
+	KB = 1024
+)
+
+// computeBlockSize 根据给定的带宽和 RTT 数据计算合适的块大小
+func computeBlockSize(bandwidth, rtt float64) int64 {
+	rttDataLen := int(bandwidth * rtt) // 一个 RTT 内能够读取的数据
+	if rttDataLen < 16*KB {
+		return 16 * KB
+	} else if rttDataLen < 32*KB {
+		return defaultBlockSize // i.e., 32KB
+	} else if rttDataLen < 64*KB {
+		return 64 * KB
+	} else if rttDataLen < 128*KB {
+		return 128 * KB
+	} else if rttDataLen < 256*KB {
+		return 128 * KB
+	} else {
+		return 256 * KB
+	}
 }
