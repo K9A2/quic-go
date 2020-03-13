@@ -98,7 +98,7 @@ func newSegmentedResponseBody(contentLength int) segmentedResponseBody {
 	dataMap := make(map[int]*[]byte)
 	newDataChan := make(chan *newDataBlock, 10)
 	closeChan := make(chan struct{})
-	canReadChan := make(chan struct{}, 1000)
+	canReadChan := make(chan struct{}, 10)
 	body := segmentedResponseBodyI{
 		mainBuffer:    bytes.Buffer{},
 		dataMap:       &dataMap,
@@ -331,7 +331,11 @@ func (body *segmentedResponseBodyI) setBufferBound(oldStart int, oldEnd int, new
 
 // signaleDataArrival 方法通知读线程可以读数据
 func (body *segmentedResponseBodyI) signaleDataArrival() {
-	*body.canReadChan <- struct{}{}
+	body.mutex.Lock()
+	defer body.mutex.Unlock()
+	if len(*body.canReadChan) < 1 {
+		*body.canReadChan <- struct{}{}
+	}
 }
 
 // Close 方法负责关闭该示例相关的各种资源
