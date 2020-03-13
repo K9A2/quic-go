@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 
 	"github.com/lucas-clemente/quic-go/http3"
@@ -121,6 +122,11 @@ func main() {
 	log.SetOutput(logFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 	log.Println("Starting proxy server on: ", defaultProxyAddr)
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	handler := &proxy{}
 	if err := http.ListenAndServe(defaultProxyAddr, handler); err != nil {
 		log.Fatal("ListenAndServe:", err)
