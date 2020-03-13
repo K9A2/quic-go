@@ -93,7 +93,7 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	}
 
 	// log.Printf("url = %v, statusCode = %v", requestURL, resp.StatusCode)
-	log.Printf("main: start to copy response body for url = <%v>", req.URL.RequestURI())
+	// log.Printf("main: start to copy response body for url = <%v>", req.URL.RequestURI())
 	copyHeader(wr.Header(), resp.Header)
 	wr.WriteHeader(resp.StatusCode)
 	if resp.Body != nil {

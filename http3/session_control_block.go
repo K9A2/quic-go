@@ -41,6 +41,7 @@ func (block *sessionControlblock) setIdle(requestURL string) {
 	block.mutex.Lock()
 	defer block.mutex.Unlock()
 	block.pendingRequest--
+	// log.Printf("setIdle: session = <%d>, pendingRequests = <%d>", block.id, block.pendingRequest)
 }
 
 func (block *sessionControlblock) dispatchable() bool {

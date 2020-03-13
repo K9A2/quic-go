@@ -36,8 +36,9 @@ type parallelRequestScheduler struct {
 	roundTripperOpts *roundTripperOpts
 
 	// session 管理部分
-	openedSessions []*sessionControlblock // 已经打开的 quic 连接
-	idleSession    int                    // 当前处于空闲状态的 quic 连接
+	openedSessions      []*sessionControlblock // 已经打开的 quic 连接
+	idleSession         int                    // 当前处于空闲状态的 quic 连接
+	currentSessionIndex int                    // 使用轮询算法时应当使用的 session 下标
 
 	// request 管理部分
 	documentQueue   *[]*requestControlBlock // html 文件请求队列
@@ -106,6 +107,7 @@ func (scheduler *parallelRequestScheduler) run() {
 	for {
 		select {
 		case <-*scheduler.mayExecuteNextRequest:
+			// log.Println("mayExecuteNextRequest: signal received")
 			// 执行主请求
 			nextRequest, err := scheduler.mayExecute()
 			if err == nil {
@@ -185,13 +187,25 @@ func (scheduler *parallelRequestScheduler) addNewQuicSession() (*sessionControlb
 
 // getSession 获取调度器中可用的 quicSession
 func (scheduler *parallelRequestScheduler) getSession() (*sessionControlblock, error) {
-	// 已经有了现成的 session，那么就把在这些 session 中找一个空闲的
-	for _, block := range scheduler.openedSessions {
-		if block.dispatchable() {
-			// 找到了一个处于空闲状态的 session
-			return block, nil
+	// TODO: 需要给一个轮询算法，不能每次都从第一条 session 开始
+	for i := scheduler.currentSessionIndex; i < len(scheduler.openedSessions); i++ {
+		targetBlock := scheduler.openedSessions[i]
+		// log.Printf("getSession: session = <%d>, pendingRequest = <%d>", targetBlock.id, targetBlock.pendingRequest)
+		if targetBlock.dispatchable() {
+			scheduler.currentSessionIndex = (scheduler.currentSessionIndex + 1) % len(scheduler.openedSessions)
+			// log.Printf("getSession: select = <%d>, nextIndex = <%d>, pendingRequest = <%d>",
+			// 	targetBlock.id, scheduler.currentSessionIndex, targetBlock.pendingRequest)
+			return targetBlock, nil
 		}
 	}
+
+	// 已经有了现成的 session，那么就把在这些 session 中找一个空闲的
+	// for _, block := range scheduler.openedSessions {
+	// 	if block.dispatchable() {
+	// 		// 找到了一个处于空闲状态的 session
+	// 		return block, nil
+	// 	}
+	// }
 	// 没有空闲的 session，并且不能打开新的 session
 	return nil, errNoAvailableSession
 }
@@ -205,14 +219,18 @@ func (scheduler *parallelRequestScheduler) mayExecute() (*requestControlBlock, e
 	// FIXME: 这里似乎会锁住整个调度器, 但是加了日志之后似乎重复不出来, 就这样放着先吧
 	nextRequest, index := scheduler.popRequest()
 	if nextRequest == nil {
+		// log.Println("mayExecute: no available request")
 		return nil, errNoAvailableRequest
 	}
+	// log.Printf("mayExecute: next req = <%s>", nextRequest.request.URL.RequestURI())
 
 	// 获取可用的 quic 连接
 	availableSession, err := scheduler.getSession()
 	if err != nil {
+		// log.Println("mayExecute: no available session")
 		return nil, errNoAvailableSession
 	}
+	// log.Printf("mayExecute: session = <%d>, req = <%s>", availableSession.id, nextRequest.request.URL.RequestURI())
 	availableSession.setBusy(nextRequest.request.URL.RequestURI())
 	scheduler.removeFirst(index)
 	nextRequest.designatedSession = availableSession
@@ -476,7 +494,7 @@ func (scheduler *parallelRequestScheduler) shouldUseParallelTransmission(
 // shouldSendPrestartSignal 根据剩余数据量和数据总量返回是否需要发出下一个请求
 func shouldSendPrestartSignal(remainingDataLen int, blockSize int64) bool {
 	// 尝试提前 2 个 RTT 发出请求
-	return int64(remainingDataLen) <= 2*blockSize
+	return int64(remainingDataLen) <= blockSize
 }
 
 // mayDoRequestParallel 方法负责实际发出请求并返回响应，视情况决定是否采用并行传输以降低下载时间
@@ -553,7 +571,7 @@ func (scheduler *parallelRequestScheduler) mayDoRequestParallel(reqBlock *reques
 	}
 	reqBlock.bufferBlock = mainSessionBufferControlBlock
 
-	log.Printf("main session: main buffer addr = <%p>", mainSessionBufferControlBlock.buffer)
+	// log.Printf("main session: main buffer addr = <%p>", mainSessionBufferControlBlock.buffer)
 	respBody.registerSegmentedBuffer(mainSessionBufferControlBlock)
 	// 通知上层响应体已准备
 	*reqBlock.requestDone <- struct{}{}
@@ -690,9 +708,20 @@ func (scheduler *parallelRequestScheduler) executeSubRequest(reqBlock *requestCo
 	var sendPrestartSignalOnce sync.Once
 	var setBlockSizeOnce sync.Once
 	var blockSize int64
-	blockSize = int64(defaultBlockSize)
+
+	// 把读数据时的块大小调整为 1 个 RTT 能读完的大小
+	mainSessionBandwidth := reqBlock.designatedSession.getBandwidth()
+	mainSessionRTT := (*reqBlock.designatedSession.session).GetConnectionRTT()
+	if mainSessionBandwidth > 0 && mainSessionRTT > 0 {
+		// 动态计算块大小需要带宽和 RTT 两个数据
+		reqBlock.setBlockSize(computeBlockSize(mainSessionBandwidth, mainSessionRTT))
+	} else {
+		// 没有足够数据时用默认的 32KB 块大小
+		reqBlock.setBlockSize(defaultBlockSize)
+	}
+	blockSize = reqBlock.getBlockSize()
 	for remainingDataLen > 0 {
-		if shouldSendPrestartSignal(remainingDataLen, reqBlock.getBlockSize()) {
+		if shouldSendPrestartSignal(remainingDataLen, blockSize) {
 			sendPrestartSignalOnce.Do(func() {
 				// 发送信号给调度器以触发下一请求
 				log.Printf("prestart signal sent: session = <%v>, url = <%v>", reqBlock.designatedSession.id, reqBlock.url)
