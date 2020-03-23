@@ -10,7 +10,7 @@ import (
 )
 
 // 每个 client 下最多只能开 4 个 quic 连接，相当于最多同时使用 4 条连接处理同一个请求
-const maxConcurrentSessions = 4
+const maxConcurrentSessions = 8
 
 // 默认块大小
 const defaultBlockSize = 32 * 1024
@@ -34,7 +34,8 @@ type clientInfo struct {
 type requestScheduler interface {
 	addAndWait(*http.Request) (*http.Response, error) // 把收到的请求添加到
 	close() error                                     // 拆除调度器实例
-	run()                                             // 运行调度器实例主线程
+
+	run() // 运行调度器实例主线程
 }
 
 // newRequestScheduler 是根据给定调度器类型生成对应调度器实例的工厂方法

@@ -246,6 +246,7 @@ skipReadOperation:
 			// 1. 写进程跟不上读进程
 			// 2. 读完当前 buffer 的数据
 			// 3. 真的读完全部数据了
+			// log.Printf("targetBuffer.readDataLen = <%d>, contentLength = <%d>", targetBuffer.readDataLen, targetBuffer.end-targetBuffer.start+1)
 			if targetBuffer.readDataLen < (targetBuffer.end - targetBuffer.start + 1) {
 				// 写线程跟不上读线程，表现是本段 buffer 的读取字节数小于应读字节数
 				// log.Println("Read: read thread too fast")
@@ -262,7 +263,8 @@ skipReadOperation:
 			// 1. 对于仅读完本 buffer 的数据而尚未读完请求所声明的全部数据，则切换到下一个 buffer，
 			//    如果已经读到部分字节，则返回这些已经读到的字节；否则阻塞至有新数据到达
 			// 2. 对于读完请求声明的全数据，则我们返回 (0, EOF) 即可。
-			if body.readDataLen == body.contentLength {
+			// log.Printf("body.readDataLen = <%d>, body.contentLength = <%d>", body.readDataLen, body.contentLength)
+			if body.readDataLen >= body.contentLength {
 				// 读完全部数据
 				// log.Printf("Read: all response body data read, readDataLen = <%d>, contentLength = <%d>", body.readDataLen, body.contentLength)
 				body.mutex.Unlock()
@@ -281,6 +283,9 @@ skipReadOperation:
 			// log.Printf("Read: body.readDataLen = <%v>, body.contentLength = <%v>", body.readDataLen, body.contentLength)
 			// 没有读到任何数据就遇到 EOF 了
 			// log.Printf("Read: move to next buffer")
+			// log.Printf("targetBuffer.readDataLen = <%d>, targetBuffer.contentLength = <%d>", targetBuffer.readDataLen, targetBuffer.end-targetBuffer.start+1)
+			// log.Printf("body.readDataLen = <%d>, body.contentLength = <%d>", body.readDataLen, body.contentLength)
+			// log.Printf("currentBufferBlockIndex: %d, err = <%s>, written = <%d>", body.currentBufferBlockIndex, err.Error(), written)
 			body.currentBufferBlockIndex++
 			// log.Printf("Read: buffer all read: start = <%d>, end = <%d>", targetBuffer.start, targetBuffer.end)
 			// log.Printf("Read: next buffer: start = <%d>, end = <%d>",

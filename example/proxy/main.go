@@ -51,29 +51,29 @@ type proxy struct{}
 var h3Client = newH3Client()
 
 func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
-	hostname := req.URL.Hostname()
+	// hostname := req.URL.Hostname()
 	requestURL := req.URL.RequestURI()
-	scheme := req.URL.Scheme
+	// scheme := req.URL.Scheme
 
-	if hostname != "www.stormlin.com" {
-		// 请求的不是本地服务器，直接返回 404 Not Found 错误
-		http.Error(wr, "Not Found", http.StatusNotFound)
-		// log.Printf("reject request with url = <%v>", hostname+requestURL)
-		return
-	}
+	// if hostname != "www.stormlin.com" {
+	// 	// 请求的不是本地服务器，直接返回 404 Not Found 错误
+	// 	http.Error(wr, "Not Found", http.StatusNotFound)
+	// 	// log.Printf("reject request with url = <%v>", hostname+requestURL)
+	// 	return
+	// }
 
-	if scheme != "http" && scheme != "https" {
-		msg := "unsupported protocol scheme <" + scheme + ">"
-		http.Error(wr, msg, http.StatusBadRequest)
-		log.Println(msg)
-		return
-	}
+	// if scheme != "http" && scheme != "https" {
+	// 	msg := "unsupported protocol scheme <" + scheme + ">"
+	// 	http.Error(wr, msg, http.StatusBadRequest)
+	// 	log.Println(msg)
+	// 	return
+	// }
 
 	// h2Client := &http.Client{}
 
 	log.Printf("received request <%v>", requestURL)
 	// 根据客户端的请求重新生成到远程服务器的请求
-	req, err := http.NewRequest(http.MethodGet, "https://"+hostname+requestURL, nil)
+	req, err := http.NewRequest(http.MethodGet, "https://www.stormlin.com"+requestURL, nil)
 	if err != nil {
 		http.Error(wr, "Server Error", http.StatusInternalServerError)
 		log.Printf("ServeHTTP: %v", err.Error())
@@ -102,6 +102,16 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	log.Printf("request finished <%v>", requestURL)
 }
 
+// redirect 把收到的全部请求都重定向为 HTTP 协议
+func redirect(w http.ResponseWriter, req *http.Request) {
+	targetURL := "http://" + req.Host + req.URL.Path
+	if len(req.URL.RawQuery) > 0 {
+		targetURL += "?" + req.URL.RawQuery
+	}
+	log.Printf("redirect to: %s", targetURL)
+	http.Redirect(w, req, targetURL, http.StatusMovedPermanently)
+}
+
 func main() {
 	if _, err := os.Stat(logFilePath); err == nil {
 		// 日志文件已存在，删除此日志文件
@@ -123,9 +133,8 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 	log.Println("Starting proxy server on: ", defaultProxyAddr)
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	// 把全部 HTTPS 请求重定向为 HTTP 请求t
+	go http.ListenAndServeTLS(":443", "cert.pem", "cert.key", http.HandlerFunc(redirect))
 
 	handler := &proxy{}
 	if err := http.ListenAndServe(defaultProxyAddr, handler); err != nil {

@@ -102,15 +102,15 @@ func main() {
 	log.Println("program started")
 
 	// 在后台运行数据收集器实例
-	collector := http3.NewStatisticsCollector()
-	go collector.Run()
+	// collector := http3.NewStatisticsCollector()
+	// go collector.Run()
 
 	var result int64
-	repeatFor := 1
+	repeatFor := 20
 	for i := 0; i < repeatFor; i++ {
 		fmt.Println(i)
 		timeStart := time.Now()
-		url := "https://www.stormlin.com/4MB"
+		url := "https://www.stormlin.com/512KB"
 
 		// defaultBlockSize := int64(512 * 1024)
 

@@ -58,7 +58,7 @@ func newParallelRequestScheduler(info *clientInfo) requestScheduler {
 	mutex := sync.Mutex{}
 
 	mayExecuteNextRequestChan := make(chan struct{}, 10)
-	newSessionAddedChan := make(chan struct{})
+	newSessionAddedChan := make(chan struct{}, maxConcurrentSessions)
 
 	documentQueue := make([]*requestControlBlock, 0)
 	styleSheetQueue := make([]*requestControlBlock, 0)
@@ -181,13 +181,14 @@ func (scheduler *parallelRequestScheduler) addNewQuicSession() (*sessionControlb
 	scheduler.openedSessions = append(scheduler.openedSessions, newSessionBlock)
 	scheduler.maxSessionID++
 	scheduler.mutex.Unlock()
+	log.Printf("addNewQuicSession: added = <%d>", newSessionBlock.id)
 	*scheduler.mayExecuteNextRequest <- struct{}{}
+	*scheduler.newSessionAddedChan <- struct{}{}
 	return newSessionBlock, nil
 }
 
 // getSession 获取调度器中可用的 quicSession
 func (scheduler *parallelRequestScheduler) getSession() (*sessionControlblock, error) {
-	// TODO: 需要给一个轮询算法，不能每次都从第一条 session 开始
 	for i := scheduler.currentSessionIndex; i < len(scheduler.openedSessions); i++ {
 		targetBlock := scheduler.openedSessions[i]
 		// log.Printf("getSession: session = <%d>, pendingRequest = <%d>", targetBlock.id, targetBlock.pendingRequest)
@@ -198,15 +199,6 @@ func (scheduler *parallelRequestScheduler) getSession() (*sessionControlblock, e
 			return targetBlock, nil
 		}
 	}
-
-	// 已经有了现成的 session，那么就把在这些 session 中找一个空闲的
-	// for _, block := range scheduler.openedSessions {
-	// 	if block.dispatchable() {
-	// 		// 找到了一个处于空闲状态的 session
-	// 		return block, nil
-	// 	}
-	// }
-	// 没有空闲的 session，并且不能打开新的 session
 	return nil, errNoAvailableSession
 }
 
@@ -476,7 +468,7 @@ func (scheduler *parallelRequestScheduler) shouldUseParallelTransmission(
 		remainingDataSubReqs -= (subReq.bytesEndOffset - subReq.bytesStartOffset)
 		startOffset += numBlocks * blockSize
 	}
-	if len(subRequests)-1 > 0 {
+	if len(subRequests) > 0 {
 		lastSubRequest := subRequests[len(subRequests)-1]
 		oldStart := lastSubRequest.bytesStartOffset
 		oldEnd := lastSubRequest.bytesEndOffset
@@ -488,6 +480,9 @@ func (scheduler *parallelRequestScheduler) shouldUseParallelTransmission(
 		finalResponseBody.setBufferBound(oldStart, oldEnd, newStart, newEnd)
 	}
 
+	if len(subRequests) == 0 {
+		return remainingDataLen, nil
+	}
 	return mainSessionAdjustedEndOffset, &subRequests
 }
 
@@ -663,16 +658,37 @@ func (scheduler *parallelRequestScheduler) executeSubRequest(reqBlock *requestCo
 		scheduler.mutex.Lock()
 		// 调度器没有为该请求分配 session，需要在执行的时候现开一条新的 session
 		log.Println("get session for sub request")
-		reqBlock.designatedSession, err = scheduler.getSession()
-		if err != nil {
+		session, err := scheduler.getSession()
+		scheduler.mutex.Unlock()
+		reqBlock.designatedSession = session
+		if err != nil && err != errNoAvailableSession {
 			log.Printf("error: %v", err.Error())
 			*reqBlock.requestError <- struct{}{}
 			reqBlock.designatedSession.setIdle(reqBlock.url)
-			scheduler.mutex.Unlock()
 			return
 		}
+		if err != nil {
+			log.Printf("error: %s", err.Error())
+		}
+		if err == errNoAvailableSession {
+			log.Println("error: wait for newly added session")
+		hotfix:
+			select {
+			case <-*scheduler.newSessionAddedChan:
+				scheduler.mutex.Lock()
+				session, _ := scheduler.getSession()
+				if session == nil {
+					log.Println("error: wait for next signal")
+					goto hotfix
+				}
+				reqBlock.designatedSession = session
+				scheduler.mutex.Unlock()
+			}
+		}
+		if reqBlock.designatedSession == nil {
+			log.Printf("error get nil session")
+		}
 		reqBlock.designatedSession.setBusy(reqBlock.url)
-		scheduler.mutex.Unlock()
 	} else {
 		reqBlock.designatedSession.setBusy(reqBlock.url)
 	}
